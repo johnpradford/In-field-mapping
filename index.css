@@ -1,0 +1,45 @@
+/* MapLibre's CSS — required for the map to render correctly.
+   Must come BEFORE the @tailwind directives because @import has to
+   precede all other CSS rules. */
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global resets / mobile tweaks */
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* the map screen handles its own scrolling */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  /* Respect iOS notch / Android nav bar */
+  background: #1c4a50;
+}
+
+/* Allow text selection in inputs / textareas / notes fields */
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Disable double-tap zoom on iOS */
+button {
+  touch-action: manipulation;
+}
+
+/* Safe area helpers — used inside components */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
