@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import maplibregl, { Map as MapLibreMapInstance, GeoJSONSource } from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 import {
@@ -38,11 +38,24 @@ export default function MapLibreMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMapInstance | null>(null);
 
+  // True once the map's style has loaded and our sources/layers exist.
+  // Bug fix: previously the pin / layer sync effects bailed out when
+  // `isStyleLoaded()` was false (which is the case on first render),
+  // and never re-ran once the style finished loading. That meant pins
+  // and imported layers added before the style was ready never showed
+  // up. We now flip this state to true inside the `load` callback,
+  // which causes every dependent effect to re-run with the latest data
+  // from the Zustand store.
+  const [mapReady, setMapReady] = useState(false);
+
   const pins = useAppStore((s) => s.pins);
   const layers = useAppStore((s) => s.layers);
   const activeTool = useAppStore((s) => s.activeTool);
   const addMeasurePoint = useAppStore((s) => s.addMeasurePoint);
   const measurePoints = useAppStore((s) => s.measurePoints);
+  const addPin = useAppStore((s) => s.addPin);
+  const nextPinNumber = useAppStore((s) => s.nextPinNumber);
+  const activeProject = useAppStore((s) => s.activeProject);
 
   // ----- Initialise map once -----
   useEffect(() => {
@@ -59,6 +72,13 @@ export default function MapLibreMap({
     });
 
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
+
+    // Scale bar in the bottom-left of the map. Useful in the field for
+    // judging distances at a glance without using the Measure tool.
+    map.addControl(
+      new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }),
+      'bottom-left',
+    );
 
     // Show user location (web GeolocateControl — replaced by Capacitor watch on device)
     map.addControl(
@@ -103,7 +123,7 @@ export default function MapLibreMap({
         },
       });
 
-      // Empty measure source + layer
+      // Empty measure source + layers (line, per-point dots, per-segment labels)
       map.addSource('measure', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -112,9 +132,50 @@ export default function MapLibreMap({
         id: 'measure-line',
         type: 'line',
         source: 'measure',
-        paint: { 'line-color': '#E6007E', 'line-width': 3, 'line-dasharray': [2, 1] },
+        filter: ['==', ['geometry-type'], 'LineString'],
+        paint: {
+          'line-color': '#FFFFFF',
+          'line-width': 3,
+          'line-dasharray': [2, 1],
+        },
+      });
+      map.addLayer({
+        id: 'measure-points',
+        type: 'circle',
+        source: 'measure',
+        // Tapped points only — exclude the per-segment label points
+        filter: ['all',
+          ['==', ['geometry-type'], 'Point'],
+          ['!=', ['get', 'kind'], 'segmentLabel'],
+        ],
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#FFFFFF',
+          'circle-stroke-color': '#1C4A50',
+          'circle-stroke-width': 2,
+        },
+      });
+      // Per-segment distance labels — e.g. "47 m"
+      map.addLayer({
+        id: 'measure-segment-labels',
+        type: 'symbol',
+        source: 'measure',
+        filter: ['==', ['get', 'kind'], 'segmentLabel'],
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 12,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+          'text-padding': 2,
+        },
+        paint: {
+          'text-color': '#1C4A50',
+          'text-halo-color': '#FFFFFF',
+          'text-halo-width': 2,
+        },
       });
 
+      setMapReady(true);
       onMapReady?.(map);
     });
 
@@ -122,51 +183,80 @@ export default function MapLibreMap({
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ----- Sync pins -----
+  // Re-runs whenever pins change OR when the map first becomes ready,
+  // so pins added before style-load still show up.
   useEffect(() => {
+    if (!mapReady) return;
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
     const src = map.getSource('pins') as GeoJSONSource | undefined;
     src?.setData(pinsToGeoJson(pins));
-  }, [pins]);
+  }, [pins, mapReady]);
 
   // ----- Sync imported layers -----
   useEffect(() => {
+    if (!mapReady) return;
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
     syncImportedLayers(map, layers);
-  }, [layers]);
+  }, [layers, mapReady]);
 
   // ----- Sync measure points -----
+  // Always render every tapped point as a circle, plus a connecting line
+  // once there are 2+ points. Showing the first tapped point gives the
+  // operator immediate visual confirmation that the click registered.
+  // Per-segment distance labels are also added.
   useEffect(() => {
+    if (!mapReady) return;
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
     const src = map.getSource('measure') as GeoJSONSource | undefined;
     if (!src) return;
-    if (measurePoints.length < 2) {
-      src.setData({ type: 'FeatureCollection', features: [] });
-      return;
-    }
-    src.setData({
-      type: 'FeatureCollection',
-      features: [
-        {
+
+    const features: GeoJSON.Feature[] = measurePoints.map((m, i) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: m.coordinate },
+      properties: { idx: i, kind: 'measurePoint' },
+    }));
+    if (measurePoints.length >= 2) {
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: measurePoints.map((m) => m.coordinate),
+        },
+        properties: { kind: 'measureLine' },
+      });
+      // Add a midpoint Point per segment with a distance label
+      for (let i = 1; i < measurePoints.length; i++) {
+        const a = measurePoints[i - 1].coordinate;
+        const b = measurePoints[i].coordinate;
+        const meters = haversineMetres(a, b);
+        const label = meters < 1000
+          ? `${Math.round(meters)} m`
+          : `${(meters / 1000).toFixed(2)} km`;
+        features.push({
           type: 'Feature',
           geometry: {
-            type: 'LineString',
-            coordinates: measurePoints.map((m) => m.coordinate),
+            type: 'Point',
+            coordinates: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
           },
-          properties: {},
-        },
-      ],
-    });
-  }, [measurePoints]);
+          properties: { kind: 'segmentLabel', label, segmentIdx: i - 1 },
+        });
+      }
+    }
+    src.setData({ type: 'FeatureCollection', features });
+  }, [measurePoints, mapReady]);
 
   // ----- Map tap handling depending on active tool -----
+  // Measure tool: each tap appends a new measure point.
+  // Pin tool:     each tap drops a pin at the tapped coordinate (tap-to-place).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -175,17 +265,44 @@ export default function MapLibreMap({
       const coord: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       if (activeTool === 'measure') {
         addMeasurePoint({ coordinate: coord });
+        return;
       }
-      // The Pin tool uses the GPS location, not a tapped coordinate —
-      // see MapScreen for the Pin handler. Tapping while pin tool is
-      // active is intentionally a no-op.
+      if (activeTool === 'pin') {
+        addPin({
+          id: crypto.randomUUID(),
+          number: nextPinNumber,
+          coordinate: coord,
+          // No GPS fix here — this is a tap-placed pin. accuracy is required
+          // by the Pin interface so we record 0 to indicate "not from GPS".
+          accuracy: 0,
+          timestamp: new Date().toISOString(),
+          note: '',
+          projectId: activeProject?.id,
+        });
+        // Pin mode stays active so the operator can drop several in a
+        // row. They tap the Pin button again to exit.
+      }
     }
 
     map.on('click', onClick);
     return () => {
       map.off('click', onClick);
     };
-  }, [activeTool, addMeasurePoint]);
+  }, [activeTool, addMeasurePoint, addPin, nextPinNumber, activeProject]);
+
+  // ----- Cursor feedback for drawing tools -----
+  // Without this the cursor stays as the pan-hand and the operator
+  // can't tell that tap-to-place is enabled.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const canvas = map.getCanvas();
+    if (activeTool === 'measure' || activeTool === 'pin') {
+      canvas.style.cursor = 'crosshair';
+    } else {
+      canvas.style.cursor = '';
+    }
+  }, [activeTool]);
 
   return <div ref={containerRef} className="absolute inset-0" />;
 }
@@ -199,6 +316,20 @@ function pinsToGeoJson(pins: Pin[]): GeoJSON.FeatureCollection {
       properties: { id: p.id, number: p.number, note: p.note },
     })),
   };
+}
+
+/** Haversine distance in metres between two [lng,lat] coordinates. */
+function haversineMetres(a: [number, number], b: [number, number]): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const [lng1, lat1] = a;
+  const [lng2, lat2] = b;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
 /** Add/remove/update sources + paint layers so the map matches the store. */
