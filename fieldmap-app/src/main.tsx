@@ -1,4 +1,15 @@
 import ReactDOM from 'react-dom/client';
+import { IonApp } from '@ionic/react';
+import '@ionic/react/css/core.css';
+import '@ionic/react/css/normalize.css';
+import '@ionic/react/css/structure.css';
+import '@ionic/react/css/typography.css';
+import '@ionic/react/css/padding.css';
+import '@ionic/react/css/float-elements.css';
+import '@ionic/react/css/text-alignment.css';
+import '@ionic/react/css/text-transformation.css';
+import '@ionic/react/css/flex-utils.css';
+import '@ionic/react/css/display.css';
 import App from './App';
 import './index.css';
 
@@ -9,4 +20,8 @@ import './index.css';
 // occasionally races with our source/layer setup and leaves pins / measure
 // overlays unrendered. Removing StrictMode is the simplest reliable fix
 // here. Standard mounts in production are unaffected either way.
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <IonApp>
+    <App />
+  </IonApp>
+);
