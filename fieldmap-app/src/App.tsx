@@ -1,11 +1,14 @@
 import { useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { requestLocationPermissions } from '@/services/locationService';
+import { startAutosave } from '@/services/autosaveService';
+import { restoreLastProject } from '@/services/projectService';
 import MapScreen from '@/screens/MapScreen';
 import ProjectsScreen from '@/screens/ProjectsScreen';
 import ProjectDetailScreen from '@/screens/ProjectDetailScreen';
 import LayersScreen from '@/screens/LayersScreen';
 import LayerDetailScreen from '@/screens/LayerDetailScreen';
+import PinsLayerScreen from '@/screens/PinsLayerScreen';
 import ImportScreen from '@/screens/ImportScreen';
 import ExportScreen from '@/screens/ExportScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
@@ -26,6 +29,17 @@ export default function App() {
     requestLocationPermissions().catch((err) => {
       console.warn('Could not request location permissions:', err);
     });
+
+    // Re-open whichever project the user had open last time
+    restoreLastProject().catch((err) => {
+      console.warn('Could not restore last project:', err);
+    });
+
+    // Start writing every store change back to the local database
+    const stopAutosave = startAutosave();
+    return () => {
+      stopAutosave();
+    };
   }, []);
 
   switch (currentScreen.name) {
@@ -39,6 +53,8 @@ export default function App() {
       return <LayersScreen />;
     case 'layerDetail':
       return <LayerDetailScreen layerId={currentScreen.layerId} />;
+    case 'pinsLayer':
+      return <PinsLayerScreen projectId={currentScreen.projectId} />;
     case 'import':
       return <ImportScreen />;
     case 'export':

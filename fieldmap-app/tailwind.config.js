@@ -17,10 +17,16 @@ export default {
         pink: '#E6007E',
         lavender: '#9B8EC4',
         skyblue: '#B8D4E3',
+        // Recording indicator — a clean safety red distinct from the
+        // brand pink used for destructive confirmations.
+        'recording-red': '#D32F2F',
       },
       fontFamily: {
-        // Use system font stack for best native feel and zero font-loading delay in the field
+        // Montserrat (weight 500 = Medium) is the app's brand font.
+        // System sans-serif fallback ensures the app still renders if
+        // the Google Fonts CSS hasn't loaded yet (offline first launch).
         sans: [
+          'Montserrat',
           '-apple-system',
           'BlinkMacSystemFont',
           'Segoe UI',
@@ -29,6 +35,12 @@ export default {
           'Arial',
           'sans-serif',
         ],
+      },
+      // Set the default weight for the brand body text. Tailwind's
+      // built-in `font-medium` class still produces 500, this just
+      // ensures unstyled text renders at Medium too.
+      fontWeight: {
+        normal: '500',
       },
     },
   },

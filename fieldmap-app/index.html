@@ -10,6 +10,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Fieldmap</title>
+    <!--
+      Montserrat (weight 500 — Medium) is the app's primary font.
+      We preconnect to Google Fonts and fetch only the weights we use
+      so first paint stays fast. The CSS font-family stack falls back
+      to the system sans-serif if the network is unavailable, which
+      keeps Fieldmap usable offline. For a strictly offline build,
+      install @fontsource/montserrat and import it in main.tsx.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="root"></div>

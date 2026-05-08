@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import ScreenHeader from '@/components/ScreenHeader';
 import { useAppStore } from '@/store/appStore';
-import { getLayersForProject, getPinsForProject, getTracksForProject } from '@/services/databaseService';
+import { loadProject } from '@/services/projectService';
 import type { Project } from '@/models/Project';
 
 /**
@@ -12,23 +12,22 @@ import type { Project } from '@/models/Project';
 export default function ProjectDetailScreen({ projectId }: { projectId: string }) {
   const projects = useAppStore((s) => s.projects);
   const navigate = useAppStore((s) => s.navigate);
-  const setActiveProject = useAppStore((s) => s.setActiveProject);
+  const activeProject = useAppStore((s) => s.activeProject);
+  const pinCount = useAppStore((s) => s.pins.length);
+  const trackCount = useAppStore((s) => s.tracks.length);
+  const layerCount = useAppStore((s) => s.layers.length);
 
   const project: Project | undefined = projects.find((p) => p.id === projectId);
 
-  const [counts, setCounts] = useState({ pins: 0, tracks: 0, layers: 0 });
-
+  // If we navigated here directly without going through ProjectsScreen,
+  // make sure the project's data is loaded into the store.
   useEffect(() => {
-    if (!project) return;
-    setActiveProject(project);
-    Promise.all([
-      getPinsForProject(project.id),
-      getTracksForProject(project.id),
-      getLayersForProject(project.id),
-    ]).then(([pins, tracks, layers]) =>
-      setCounts({ pins: pins.length, tracks: tracks.length, layers: layers.length }),
-    );
-  }, [project, setActiveProject]);
+    if (project && activeProject?.id !== project.id) {
+      loadProject(project).catch((err) =>
+        console.warn('Could not load project:', err),
+      );
+    }
+  }, [project, activeProject]);
 
   if (!project) {
     return (
@@ -44,9 +43,9 @@ export default function ProjectDetailScreen({ projectId }: { projectId: string }
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="bg-white rounded-2xl p-4 grid grid-cols-3 text-center">
-          <Stat label="Pins" value={counts.pins} />
-          <Stat label="Tracks" value={counts.tracks} />
-          <Stat label="Layers" value={counts.layers} />
+          <Stat label="Pins" value={pinCount} />
+          <Stat label="Tracks" value={trackCount} />
+          <Stat label="Layers" value={layerCount} />
         </div>
 
         <div className="bg-white rounded-2xl divide-y divide-greylight">

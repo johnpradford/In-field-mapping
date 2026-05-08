@@ -1,10 +1,15 @@
-import { Layers, FolderOpen, Download, Upload, Settings as SettingsIcon, X } from 'lucide-react';
+import { Layers, FolderOpen, Settings as SettingsIcon, X } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import type { Screen } from '@/store/appStore';
 
 /**
  * Slide-up "More" menu. Mirrors MoreMenuView.swift.
  * Opens via the More button in the bottom bar.
+ *
+ * Import and Export used to live here as separate menu items but have
+ * been moved into the Layers screen header (small + and share icons),
+ * since import/export and layer management belong together
+ * conceptually and that keeps the More menu shorter.
  */
 export default function MoreMenu() {
   const show = useAppStore((s) => s.showMoreMenu);
@@ -39,9 +44,7 @@ export default function MoreMenu() {
           </button>
         </div>
         <MenuRow icon={<FolderOpen size={22} />} label="Projects" onPress={() => go({ name: 'projects' })} />
-        <MenuRow icon={<Layers size={22} />} label="Layers" onPress={() => go({ name: 'layers' })} />
-        <MenuRow icon={<Upload size={22} />} label="Import" onPress={() => go({ name: 'import' })} />
-        <MenuRow icon={<Download size={22} />} label="Export" onPress={() => go({ name: 'export' })} />
+        <MenuRow icon={<Layers size={22} />} label="Layers (Import / Export)" onPress={() => go({ name: 'layers' })} />
         <MenuRow icon={<SettingsIcon size={22} />} label="Settings" onPress={() => go({ name: 'settings' })} />
       </div>
     </div>

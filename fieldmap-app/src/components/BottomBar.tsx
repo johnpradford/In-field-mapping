@@ -7,13 +7,29 @@ import { useAppStore } from '@/store/appStore';
  *
  * Designed for one-handed use: full-width, big targets, accent
  * colour for the active tool.
+ *
+ * Tool buttons (Pin, Measure) work as drawing-tool toggles: tap once to
+ * arm the tool (cursor becomes a crosshair, hint banner appears), tap
+ * again to exit. The actual placement of pins / measure points is done
+ * by tapping the map — see MapLibreMap.tsx.
+ *
+ * Record button uses a SYMMETRIC two-step pattern on both ends so a
+ * finger-graze in the field can't accidentally start or kill a track:
+ *   - Idle, 1st tap on Record: shows the big "Start Recording" pill
+ *     on the map; recording has NOT begun yet.
+ *   - Tap "Start Recording" pill: recording actually begins.
+ *   - Recording, 1st tap on Record: shows the big "Stop Recording" pill;
+ *     recording continues.
+ *   - Tap "Stop Recording" pill: recording actually ends.
+ *   - Tapping Record again while a confirmation pill is shown hides
+ *     the pill (cancel).
  */
-export default function BottomBar({ onPinTap }: { onPinTap: () => void }) {
+export default function BottomBar() {
   const activeTool = useAppStore((s) => s.activeTool);
   const isRecording = useAppStore((s) => s.isRecording);
   const setActiveTool = useAppStore((s) => s.setActiveTool);
-  const startRecording = useAppStore((s) => s.startRecording);
-  const stopRecording = useAppStore((s) => s.stopRecording);
+  const toggleStartRecordingButton = useAppStore((s) => s.toggleStartRecordingButton);
+  const toggleStopRecordingButton = useAppStore((s) => s.toggleStopRecordingButton);
   const setShowMoreMenu = useAppStore((s) => s.setShowMoreMenu);
 
   return (
@@ -23,10 +39,10 @@ export default function BottomBar({ onPinTap }: { onPinTap: () => void }) {
           label="Pin"
           icon={<MapPin size={26} />}
           active={activeTool === 'pin'}
-          onPress={onPinTap}
+          onPress={() => setActiveTool(activeTool === 'pin' ? 'none' : 'pin')}
         />
         <BarButton
-          label={isRecording ? 'Stop' : 'Record'}
+          label="Record"
           icon={
             <Circle
               size={26}
@@ -34,7 +50,9 @@ export default function BottomBar({ onPinTap }: { onPinTap: () => void }) {
             />
           }
           active={isRecording}
-          onPress={() => (isRecording ? stopRecording() : startRecording())}
+          onPress={() =>
+            isRecording ? toggleStopRecordingButton() : toggleStartRecordingButton()
+          }
         />
         <BarButton
           label="Measure"

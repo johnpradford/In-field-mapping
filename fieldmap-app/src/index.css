@@ -1,9 +1,28 @@
+/* MapLibre's CSS — required for the map to render correctly.
+   Must come BEFORE the @tailwind directives because @import has to
+   precede all other CSS rules. */
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* MapLibre's CSS — required for the map to render correctly */
-@import 'maplibre-gl/dist/maplibre-gl.css';
+/* Global app constants — referenced by component CSS and by the
+   MapLibre control overrides below. Updating these here updates the
+   layout in one place. */
+:root {
+  --bottom-bar-h: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* Vertical clearance below the iOS notch (or below the simulated
+     desktop notch in dev preview, which is 26 px tall). On real devices
+     env(safe-area-inset-top) is large enough on its own (~47 px on a
+     notched iPhone), but the desktop simulator returns 0 and would put
+     overlays underneath the faux notch — so we floor the value at 32 px. */
+  --top-bar-y: max(env(safe-area-inset-top, 0px), 32px);
+}
 
 /* Global resets / mobile tweaks */
 html,
@@ -19,6 +38,30 @@ body,
   user-select: none;
   /* Respect iOS notch / Android nav bar */
   background: #1c4a50;
+  /* Brand font — Montserrat Medium. The full system fallback stack
+     keeps the app readable if Google Fonts isn't reachable on first
+     run (e.g. offline first launch). */
+  font-family:
+    'Montserrat',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  font-weight: 500; /* Medium */
+}
+
+/* Inputs and buttons inherit the page font instead of the user-agent
+   default (Helvetica/Arial), so labels and form fields read in
+   Montserrat too. */
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  font-weight: inherit;
 }
 
 /* Allow text selection in inputs / textareas / notes fields */
@@ -36,8 +79,126 @@ button {
 
 /* Safe area helpers — used inside components */
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
 }
 .pt-safe {
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-top);
+}
+
+/* ---------------------------------------------------------------
+   MapLibre control positioning overrides
+
+   By default MapLibre anchors its bottom-left / bottom-right
+   controls at the bottom edge of the map container. Our map fills
+   the whole screen, so those controls end up underneath the
+   orange Pin/Record/Measure/More ribbon. Push them up by the
+   ribbon height + the iOS safe-area inset so the scale bar and
+   "Imagery © Esri…" attribution have clearance above the ribbon.
+
+   Similarly the top-left/top-right MapLibre controls (we use
+   top-left for the GPS-centre button) need to clear the iOS notch.
+   --------------------------------------------------------------- */
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+  bottom: calc(var(--bottom-bar-h) + var(--safe-bottom) + 8px) !important;
+  z-index: 10;
+}
+.maplibregl-ctrl-bottom-left {
+  left: calc(var(--safe-left) + 8px) !important;
+}
+.maplibregl-ctrl-bottom-right {
+  right: calc(var(--safe-right) + 8px) !important;
+}
+.maplibregl-ctrl-top-left {
+  top: calc(var(--top-bar-y) + 4px) !important;
+  left: calc(var(--safe-left) + 12px) !important;
+  z-index: 10;
+}
+.maplibregl-ctrl-top-right {
+  top: calc(var(--top-bar-y) + 4px) !important;
+  right: calc(var(--safe-right) + 12px) !important;
+  z-index: 10;
+}
+
+/* ---------------------------------------------------------------
+   Scale bar styling
+
+   MapLibre's default scale bar puts the text INSIDE a bordered box, so
+   the text and the line overlap. We move the line + end-notches into a
+   ::after pseudo-element below the text. The result: the distance
+   ("100 m") sits ABOVE a clean white bar with vertical notches at
+   each end. Readable on satellite imagery.
+   --------------------------------------------------------------- */
+.maplibregl-ctrl-scale {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  text-align: center !important;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  /* Make room beneath the text for the bar drawn by ::after */
+  padding-bottom: 8px !important;
+  position: relative;
+  /* The control wrapper from index.css absolutely-positions us above
+     the bottom ribbon already; we just need to keep the box transparent. */
+}
+
+/* The bar with end notches, drawn under the text */
+.maplibregl-ctrl-scale::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  border: 2px solid #ffffff;
+  border-top: 0;
+  /* Drop shadow so the white bar stays visible on white-ish satellite */
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------------------------------------------------------
+   DESKTOP PREVIEW
+   When the app runs in a browser at desktop width (e.g. dev preview
+   on a laptop), constrain it to a portrait phone-shaped frame so the
+   layout matches what we'll see on an actual phone. On real devices
+   (narrow viewports) this rule does nothing.
+   --------------------------------------------------------------- */
+@media (min-width: 600px) {
+  body {
+    background: radial-gradient(ellipse at center, #2a2f33 0%, #15181b 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #root {
+    width: 390px;
+    height: 844px;
+    max-height: 96vh;
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 12px #0e1012,
+      0 0 0 14px #2a2d31,
+      0 30px 80px rgba(0, 0, 0, 0.6),
+      0 10px 30px rgba(0, 0, 0, 0.4);
+  }
+  /* Faux notch */
+  #root::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 26px;
+    background: #0e1012;
+    border-radius: 0 0 18px 18px;
+    z-index: 1000;
+    pointer-events: none;
+  }
 }

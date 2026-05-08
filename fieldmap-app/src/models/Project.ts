@@ -7,4 +7,9 @@ export interface Project {
   createdAt: string;
   /** ISO timestamp. */
   updatedAt: string;
+  /** Whether the project's contents (pins, tracks, layers) currently
+   *  draw on the map. When undefined, treat as visible. Lets the user
+   *  hide an entire project from the map canvas without going into
+   *  each layer one by one. */
+  visible?: boolean;
 }

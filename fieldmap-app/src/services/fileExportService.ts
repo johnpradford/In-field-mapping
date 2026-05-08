@@ -16,6 +16,10 @@ import type { FeatureCollection, Feature } from 'geojson';
 
 export type ExportFormat = 'fieldmap' | 'geojson' | 'gpx';
 
+/** Format the user can pick when sharing pins or features inline from
+ *  the Layers / Pins detail screens. */
+export type ShareFormat = 'geojson' | 'gpx' | 'kml';
+
 export async function exportProject(
   project: Project,
   pins: Pin[],
@@ -80,13 +84,22 @@ function buildGeoJson(pins: Pin[], tracks: Track[], layers: Layer[]): FeatureCol
   const features: Feature[] = [];
 
   for (const pin of pins) {
+    // GeoJSON supports 3D coordinates as [lng, lat, alt] — include
+    // altitude as the third element when present so the data round-
+    // trips into GIS tools that read 3D points.
+    const coords: number[] =
+      pin.altitude !== undefined && Number.isFinite(pin.altitude)
+        ? [pin.coordinate[0], pin.coordinate[1], pin.altitude]
+        : [pin.coordinate[0], pin.coordinate[1]];
     features.push({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: pin.coordinate },
+      geometry: { type: 'Point', coordinates: coords },
       properties: {
         type: 'pin',
         number: pin.number,
+        name: pin.name,
         accuracy: pin.accuracy,
+        altitude: pin.altitude,
         timestamp: pin.timestamp,
         note: pin.note,
       },
@@ -97,7 +110,13 @@ function buildGeoJson(pins: Pin[], tracks: Track[], layers: Layer[]): FeatureCol
       type: 'Feature',
       geometry: {
         type: 'LineString',
-        coordinates: t.points.map((p) => p.coordinate),
+        // 3D coordinates per point — altitude as the third element
+        // when present, otherwise the standard 2D pair.
+        coordinates: t.points.map((p) =>
+          p.altitude !== undefined && Number.isFinite(p.altitude)
+            ? [p.coordinate[0], p.coordinate[1], p.altitude]
+            : [p.coordinate[0], p.coordinate[1]],
+        ),
       },
       properties: {
         type: 'track',
@@ -105,6 +124,9 @@ function buildGeoJson(pins: Pin[], tracks: Track[], layers: Layer[]): FeatureCol
         startTime: t.startTime,
         endTime: t.endTime,
         totalDistance: t.totalDistance,
+        minAltitude: t.minAltitude,
+        maxAltitude: t.maxAltitude,
+        elevationGain: t.elevationGain,
       },
     });
   }
@@ -120,14 +142,199 @@ function buildGeoJson(pins: Pin[], tracks: Track[], layers: Layer[]): FeatureCol
   return { type: 'FeatureCollection', features };
 }
 
+/* ------------------------------------------------------------------ */
+/* Subset share — used by the Pins layer detail and the Layer feature  */
+/* list to share a selected handful of features without building a     */
+/* whole project file. The user picks the format at the call site.     */
+/* ------------------------------------------------------------------ */
+
+/** Share a selection of features in the chosen format. The features
+ *  argument is what's already filtered down to the user's current
+ *  selection — this function doesn't re-filter. */
+export async function shareFeatureCollection(
+  baseFilename: string,
+  features: Feature[],
+  format: ShareFormat,
+  shareTitle: string = 'Fieldmap export',
+): Promise<void> {
+  let filename: string;
+  let contents: string;
+
+  switch (format) {
+    case 'geojson': {
+      filename = `${slug(baseFilename)}.geojson`;
+      const fc: FeatureCollection = { type: 'FeatureCollection', features };
+      contents = JSON.stringify(fc, null, 2);
+      break;
+    }
+    case 'gpx': {
+      filename = `${slug(baseFilename)}.gpx`;
+      contents = buildGpxFromFeatures(shareTitle, features);
+      break;
+    }
+    case 'kml': {
+      filename = `${slug(baseFilename)}.kml`;
+      contents = buildKmlFromFeatures(shareTitle, features);
+      break;
+    }
+  }
+
+  const written = await Filesystem.writeFile({
+    path: filename,
+    data: contents,
+    directory: Directory.Documents,
+    encoding: Encoding.UTF8,
+  });
+
+  await Share.share({
+    title: shareTitle,
+    url: written.uri,
+    dialogTitle: shareTitle,
+  });
+}
+
+/** Build a minimal GPX from a list of GeoJSON features. Points become
+ *  waypoints, LineStrings become tracks. Polygons are skipped (GPX
+ *  doesn't have a polygon concept). */
+function buildGpxFromFeatures(title: string, features: Feature[]): string {
+  const escape = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const wpts: string[] = [];
+  const trks: string[] = [];
+
+  // <ele> helper — emit only when the coord triple has an altitude.
+  const ele = (alt: number | undefined) =>
+    alt !== undefined && Number.isFinite(alt) ? `<ele>${alt}</ele>` : '';
+
+  for (const f of features) {
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    const name = String(props.name ?? props.Name ?? props.NAME ?? props.title ?? '');
+    // Pin altitude can live in properties.altitude (Fieldmap-emitted
+    // pins) or as the optional 3rd coordinate (other GeoJSON sources).
+    const propsAlt =
+      typeof props.altitude === 'number' && Number.isFinite(props.altitude)
+        ? (props.altitude as number)
+        : undefined;
+    if (!f.geometry) continue;
+    if (f.geometry.type === 'Point') {
+      const c = f.geometry.coordinates as number[];
+      const lng = c[0];
+      const lat = c[1];
+      const alt = propsAlt ?? (c.length >= 3 ? c[2] : undefined);
+      const desc = props.note ?? props.description ?? '';
+      wpts.push(
+        `  <wpt lat="${lat}" lon="${lng}">` +
+          (name ? `\n    <name>${escape(name)}</name>` : '') +
+          (alt !== undefined ? `\n    ${ele(alt)}` : '') +
+          (desc ? `\n    <desc>${escape(String(desc))}</desc>` : '') +
+          `\n  </wpt>`,
+      );
+    } else if (f.geometry.type === 'LineString') {
+      const coords = f.geometry.coordinates as number[][];
+      const segs = coords
+        .map((c) => {
+          const lng = c[0];
+          const lat = c[1];
+          const alt = c.length >= 3 ? c[2] : undefined;
+          return `      <trkpt lat="${lat}" lon="${lng}">${ele(alt)}</trkpt>`;
+        })
+        .join('\n');
+      trks.push(
+        `  <trk>${name ? `\n    <name>${escape(name)}</name>` : ''}\n    <trkseg>\n${segs}\n    </trkseg>\n  </trk>`,
+      );
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Fieldmap" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${escape(title)}</name></metadata>
+${wpts.join('\n')}
+${trks.join('\n')}
+</gpx>`;
+}
+
+/** Build a minimal KML from a list of GeoJSON features. Each feature
+ *  becomes a Placemark with the appropriate geometry. */
+function buildKmlFromFeatures(title: string, features: Feature[]): string {
+  const escape = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function coordsString(coords: number[][]): string {
+    return coords.map((c) => `${c[0]},${c[1]}${c[2] !== undefined ? ',' + c[2] : ''}`).join(' ');
+  }
+
+  function geometryToKml(geom: GeoJSON.Geometry): string {
+    switch (geom.type) {
+      case 'Point':
+        return `<Point><coordinates>${(geom.coordinates as number[]).join(',')}</coordinates></Point>`;
+      case 'LineString':
+        return `<LineString><coordinates>${coordsString(geom.coordinates as number[][])}</coordinates></LineString>`;
+      case 'Polygon': {
+        const rings = (geom.coordinates as number[][][]).map(
+          (ring) =>
+            `<LinearRing><coordinates>${coordsString(ring)}</coordinates></LinearRing>`,
+        );
+        const outer = rings[0] ? `<outerBoundaryIs>${rings[0]}</outerBoundaryIs>` : '';
+        const inners = rings
+          .slice(1)
+          .map((r) => `<innerBoundaryIs>${r}</innerBoundaryIs>`)
+          .join('');
+        return `<Polygon>${outer}${inners}</Polygon>`;
+      }
+      case 'MultiPoint':
+      case 'MultiLineString':
+      case 'MultiPolygon': {
+        // Wrap each part in its own Placemark-equivalent geometry.
+        // Simplest: emit a MultiGeometry with each child converted.
+        const partType =
+          geom.type === 'MultiPoint'
+            ? 'Point'
+            : geom.type === 'MultiLineString'
+            ? 'LineString'
+            : 'Polygon';
+        const children = (geom.coordinates as unknown[]).map((c) =>
+          geometryToKml({ type: partType, coordinates: c } as GeoJSON.Geometry),
+        );
+        return `<MultiGeometry>${children.join('')}</MultiGeometry>`;
+      }
+      default:
+        return '';
+    }
+  }
+
+  const placemarks = features
+    .filter((f) => f.geometry)
+    .map((f) => {
+      const props = (f.properties ?? {}) as Record<string, unknown>;
+      const name = String(props.name ?? props.Name ?? props.NAME ?? props.title ?? 'Feature');
+      const desc = props.note ?? props.description ?? '';
+      const descXml = desc ? `<description>${escape(String(desc))}</description>` : '';
+      return `    <Placemark><name>${escape(name)}</name>${descXml}${geometryToKml(f.geometry!)}</Placemark>`;
+    })
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escape(title)}</name>
+${placemarks}
+  </Document>
+</kml>`;
+}
+
 function buildGpx(project: Project, pins: Pin[], tracks: Track[]): string {
   const escape = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+  const ele = (a?: number) =>
+    a !== undefined && Number.isFinite(a) ? `<ele>${a}</ele>` : '';
+
   const wpts = pins
     .map(
       (p) => `  <wpt lat="${p.coordinate[1]}" lon="${p.coordinate[0]}">
-    <name>Pin ${p.number}</name>
+    <name>${escape(p.name && p.name.trim().length > 0 ? p.name : `Pin ${p.number}`)}</name>
+    ${ele(p.altitude)}
     ${p.note ? `<desc>${escape(p.note)}</desc>` : ''}
     <time>${p.timestamp}</time>
   </wpt>`,
@@ -141,7 +348,8 @@ function buildGpx(project: Project, pins: Pin[], tracks: Track[]): string {
     <trkseg>
 ${t.points
   .map(
-    (pt) => `      <trkpt lat="${pt.coordinate[1]}" lon="${pt.coordinate[0]}"><time>${pt.timestamp}</time></trkpt>`,
+    (pt) =>
+      `      <trkpt lat="${pt.coordinate[1]}" lon="${pt.coordinate[0]}">${ele(pt.altitude)}<time>${pt.timestamp}</time></trkpt>`,
   )
   .join('\n')}
     </trkseg>
