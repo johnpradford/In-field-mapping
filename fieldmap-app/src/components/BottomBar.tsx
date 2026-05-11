@@ -6,23 +6,12 @@ import { useAppStore } from '@/store/appStore';
  * Mirrors BottomBarView.swift.
  *
  * Designed for one-handed use: full-width, big targets, accent
- * colour for the active tool.
- *
- * Tool buttons (Pin, Measure) work as drawing-tool toggles: tap once to
- * arm the tool (cursor becomes a crosshair, hint banner appears), tap
- * again to exit. The actual placement of pins / measure points is done
- * by tapping the map — see MapLibreMap.tsx.
- *
- * Record button uses a SYMMETRIC two-step pattern on both ends so a
- * finger-graze in the field can't accidentally start or kill a track:
- *   - Idle, 1st tap on Record: shows the big "Start Recording" pill
- *     on the map; recording has NOT begun yet.
- *   - Tap "Start Recording" pill: recording actually begins.
- *   - Recording, 1st tap on Record: shows the big "Stop Recording" pill;
- *     recording continues.
- *   - Tap "Stop Recording" pill: recording actually ends.
- *   - Tapping Record again while a confirmation pill is shown hides
- *     the pill (cancel).
+ * colour for the active tool. Height is kept tight (~54px + iOS
+ * safe-area inset) so it doesn't obscure the map; the related
+ * --bottom-bar-h CSS variable in index.css MUST be kept in sync
+ * with the real rendered height because the MapLibre scale bar,
+ * attribution "i" button, and the Legend are all positioned
+ * relative to it.
  */
 export default function BottomBar() {
   const activeTool = useAppStore((s) => s.activeTool);
@@ -37,7 +26,7 @@ export default function BottomBar() {
       <div className="flex items-stretch">
         <BarButton
           label="Pin"
-          icon={<MapPin size={26} />}
+          icon={<MapPin size={22} />}
           active={activeTool === 'pin'}
           onPress={() => setActiveTool(activeTool === 'pin' ? 'none' : 'pin')}
         />
@@ -45,7 +34,7 @@ export default function BottomBar() {
           label="Record"
           icon={
             <Circle
-              size={26}
+              size={22}
               className={isRecording ? 'fill-pink text-pink animate-pulse' : ''}
             />
           }
@@ -56,13 +45,13 @@ export default function BottomBar() {
         />
         <BarButton
           label="Measure"
-          icon={<Ruler size={26} />}
+          icon={<Ruler size={22} />}
           active={activeTool === 'measure'}
           onPress={() => setActiveTool(activeTool === 'measure' ? 'none' : 'measure')}
         />
         <BarButton
           label="More"
-          icon={<MoreHorizontal size={26} />}
+          icon={<MoreHorizontal size={22} />}
           active={false}
           onPress={() => setShowMoreMenu(true)}
         />
@@ -86,7 +75,7 @@ function BarButton({
     <button
       type="button"
       onClick={onPress}
-      className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 transition-colors ${
+      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors ${
         active ? 'bg-accent text-white' : 'text-white active:bg-teal-mid'
       }`}
     >
