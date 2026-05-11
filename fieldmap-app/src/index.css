@@ -79,10 +79,18 @@ button {
 
 /* Safe area helpers — used inside components */
 .pb-safe {
-  padding-bottom: var(--safe-bottom);
+  padding-bottom: 0;
 }
 .pt-safe {
   padding-top: var(--safe-top);
+}
+
+/* Only apply home-indicator clearance when running as an installed PWA.
+   In a browser the OS/browser chrome already provides the clearance. */
+@media (display-mode: standalone) {
+  .pb-safe {
+    padding-bottom: var(--safe-bottom);
+  }
 }
 
 /* ---------------------------------------------------------------
