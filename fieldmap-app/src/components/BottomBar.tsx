@@ -75,7 +75,7 @@ function BarButton({
     <button
       type="button"
       onClick={onPress}
-      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors ${
+      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 transition-colors ${
         active ? 'bg-accent text-white' : 'text-white active:bg-teal-mid'
       }`}
     >

@@ -11,7 +11,7 @@
    MapLibre control overrides below. Updating these here updates the
    layout in one place. */
 :root {
-  --bottom-bar-h: 54px;
+  --bottom-bar-h: 42px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
