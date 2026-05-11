@@ -1,0 +1,73 @@
+# Build the Fieldmap PWA and publish it to GitHub Pages.
+#
+# This runs every time you push to the `main` branch. The deployed URL
+# will be:  https://johnpradford.github.io/In-field-mapping/
+#
+# You only need to enable Pages once for this repo (one-time setup):
+#   1. Go to the repo on GitHub
+#   2. Settings -> Pages
+#   3. Under "Build and deployment", set "Source" to "GitHub Actions"
+#
+# After that, every push to `main` rebuilds and republishes automatically.
+
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy in flight at a time — newer runs cancel older queued ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fieldmap-app
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: fieldmap-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for GitHub Pages
+        # FIELDMAP_BASE is read by vite.config.ts and sets the public path so
+        # that the JS/CSS/manifest/SW URLs work under the /In-field-mapping/
+        # project-site subdirectory.
+        env:
+          FIELDMAP_BASE: /In-field-mapping/
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: fieldmap-app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

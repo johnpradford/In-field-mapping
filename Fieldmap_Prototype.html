@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fieldmap">
+<title>Fieldmap</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --teal-dark:#1C4A50;--teal-mid:#577A7A;--teal-light:#9AAFAF;--sage:#C7D3D3;--grey-light:#E4EAEA;
+    --olive:#AFA96E;--orange:#E87D2F;--pink:#E6007E;--lavender:#9B8EC4;--blue-light:#B8D4E3;
+    --bg:#F6F8F8;--white:#FFF;--text-primary:#1C4A50;--text-secondary:#577A7A;--text-muted:#9AAFAF;
+    --border:#D5DEDE;--record-red:#D93025;--gps-blue:#2D7DD2;--success:#2E7D32;--danger:#D93025;
+    --bottom-bar-h:72px;--status-bar-h:max(54px, env(safe-area-inset-top));--safe-bottom:max(34px, env(safe-area-inset-bottom));
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Inter',-apple-system,sans-serif;background:var(--white);margin:0;padding:0;overflow:hidden;color:var(--text-primary);position:fixed;inset:0}
+  .phone-frame{width:100%;height:100vh;height:100dvh;background:var(--white);overflow:hidden;position:relative}
+  .status-bar{position:absolute;top:0;left:0;right:0;height:var(--status-bar-h);z-index:100;display:none;align-items:flex-end;justify-content:space-between;padding:0 32px 8px;font-size:14px;font-weight:600}
+  .status-bar.dark{color:var(--white)}.status-bar.light{color:var(--text-primary)}
+  .status-bar-left{flex:1}.status-bar-right{flex:1;text-align:right;display:flex;gap:6px;justify-content:flex-end;align-items:center}
+  .screen{position:absolute;top:0;left:0;right:0;bottom:0;display:none;flex-direction:column}
+  .screen.active{display:flex}
+
+  /* MAP CANVAS */
+  .map-canvas{flex:1;background:radial-gradient(ellipse at 30% 40%,rgba(155,175,175,0.15) 0%,transparent 50%),radial-gradient(ellipse at 70% 60%,rgba(175,169,110,0.1) 0%,transparent 40%),radial-gradient(ellipse at 50% 30%,rgba(184,212,227,0.2) 0%,transparent 60%),linear-gradient(180deg,#E8EFE8 0%,#D5DDD5 30%,#C8D4C8 60%,#BCC8BC 100%);position:relative;overflow:hidden}
+  .contour{position:absolute;border:1px solid rgba(28,74,80,0.08);border-radius:50%}
+  .contour:nth-child(1){width:200px;height:160px;top:25%;left:15%;transform:rotate(-15deg)}
+  .contour:nth-child(2){width:160px;height:130px;top:28%;left:20%;transform:rotate(-15deg)}
+  .contour:nth-child(3){width:120px;height:100px;top:31%;left:25%;transform:rotate(-12deg)}
+  .contour:nth-child(4){width:280px;height:200px;top:50%;left:40%;transform:rotate(20deg)}
+  .contour:nth-child(5){width:220px;height:160px;top:53%;left:45%;transform:rotate(20deg)}
+  .contour:nth-child(6){width:160px;height:120px;top:56%;left:50%;transform:rotate(18deg)}
+  .creek{position:absolute;top:10%;left:60%;width:3px;height:80%;background:rgba(184,212,227,0.5);transform:rotate(8deg);border-radius:2px}
+
+  /* POLYGON: separate stroke + fill, both with own opacity. Optional watermark fill pattern. */
+  .map-polygon{position:absolute;top:30%;left:15%;width:180px;height:120px;border-radius:8px 20px 12px 25px;transform:rotate(-5deg);cursor:pointer;transition:background 0.3s,border-color 0.3s,border-width 0.3s}
+  .map-polygon.watermarked{background-image:repeating-linear-gradient(45deg,rgba(28,74,80,0.06) 0,rgba(28,74,80,0.06) 8px,transparent 8px,transparent 16px)}
+  .map-polygon-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(5deg);font-size:11px;font-weight:600;color:var(--teal-dark);text-shadow:0 0 4px white,0 0 4px white;white-space:nowrap;transition:opacity 0.3s;pointer-events:none}
+  .map-polygon-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-15deg);font-size:18px;font-weight:700;color:rgba(28,74,80,0.16);letter-spacing:2px;text-transform:uppercase;white-space:nowrap;pointer-events:none;display:none}
+  .map-polygon.show-watermark .map-polygon-watermark{display:block}
+  .map-polygon.show-watermark .map-polygon-label{display:none}
+
+  /* When measure tool is active, polygons must NOT swallow taps. */
+  body.measure-active .map-polygon{pointer-events:none}
+  body.measure-active .map-line{pointer-events:none}
+  body.measure-active .map-pin{pointer-events:none}
+
+  /* TRACKS / LINES */
+  .map-line{position:absolute;top:55%;left:25%;width:200px;height:3px;transform:rotate(-12deg);cursor:pointer;transition:background 0.3s,height 0.3s,opacity 0.3s}
+  .map-line-label{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:500;color:var(--teal-dark);text-shadow:0 0 3px white;white-space:nowrap;transition:opacity 0.3s;pointer-events:none}
+
+  /* PINS — outline OFF by default. Outline becomes opt-in. */
+  .map-pin{position:absolute;width:28px;height:28px;cursor:pointer;z-index:10}
+  .map-pin-marker{width:24px;height:24px;background:var(--teal-dark);border:0 solid transparent;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center}
+  .map-pin-marker.outlined{border:2px solid var(--white)}
+  .map-pin-num{transform:rotate(45deg);color:var(--white);font-size:10px;font-weight:700}
+  .pin-1{top:35%;left:40%}.pin-2{top:48%;left:55%}.pin-3{top:62%;left:35%}
+
+  /* SURVEY POINTS layer — small circular markers that ACTUALLY render and toggle */
+  .survey-points-group{position:absolute;inset:0;z-index:9;pointer-events:none}
+  .survey-points-group.hidden{display:none}
+  .survey-pt{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--orange);box-shadow:0 1px 3px rgba(0,0,0,0.25);pointer-events:auto;cursor:pointer;transform:translate(-50%,-50%)}
+  .survey-pt-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:600;color:var(--teal-dark);text-shadow:0 0 3px white;white-space:nowrap;pointer-events:none}
+
+  .gps-dot{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:15}
+  .gps-dot-inner{width:16px;height:16px;background:var(--gps-blue);border:3px solid var(--white);border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)}
+  .gps-dot-ring{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:50%;background:rgba(45,125,210,0.12);border:1px solid rgba(45,125,210,0.2)}
+  .gps-accuracy{position:absolute;top:calc(50% + 22px);left:50%;transform:translateX(-50%);font-size:10px;font-weight:600;color:var(--gps-blue);background:rgba(255,255,255,0.85);padding:1px 5px;border-radius:4px;white-space:nowrap}
+
+  /* NORTH ARROW — redesigned compass. Clear red north needle, white south needle, "N" label. */
+  /* Position: dropped to 110px so the recording banner (top:status-bar-h, height ~36px) cannot cover it. */
+  .north-arrow{position:absolute;top:110px;right:16px;width:46px;height:46px;background:var(--white);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.18);z-index:35;cursor:pointer;border:2px solid var(--teal-dark);transition:transform 0.4s ease}
+  .north-arrow svg{width:32px;height:32px}
+  .north-arrow.locked{background:var(--teal-dark);border-color:var(--teal-dark)}
+  .north-arrow.locked .compass-bg{fill:var(--teal-dark)}
+  .north-arrow.locked .compass-tick{stroke:rgba(255,255,255,0.5)}
+  .north-arrow.locked .compass-n-label{fill:var(--white)}
+  .north-arrow.locked .compass-s-needle{fill:rgba(255,255,255,0.7)}
+  .north-arrow .lock-badge{position:absolute;bottom:-4px;right:-4px;width:16px;height:16px;background:var(--orange);border-radius:50%;display:none;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+  .north-arrow.locked .lock-badge{display:flex}
+  .north-arrow .lock-badge svg{width:9px;height:9px;color:white}
+
+  .scale-bar{position:absolute;bottom:calc(var(--bottom-bar-h) + var(--safe-bottom) + 12px);left:16px;z-index:20}
+  .scale-bar-line{width:80px;height:2px;background:var(--teal-dark);position:relative}
+  .scale-bar-line::before,.scale-bar-line::after{content:'';position:absolute;width:2px;height:8px;background:var(--teal-dark);bottom:0}
+  .scale-bar-line::before{left:0}.scale-bar-line::after{right:0}
+  .scale-bar-text{font-size:10px;font-weight:600;color:var(--teal-dark);margin-top:2px;text-shadow:0 0 3px white}
+
+  /* LEGEND — moved to top:110px to avoid the recording banner. Max-width set so it never reaches the north arrow on the right. */
+  .legend{position:absolute;top:110px;left:16px;background:rgba(255,255,255,0.92);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.12);z-index:30;min-width:44px;max-width:calc(100% - 90px);overflow:hidden;cursor:pointer}
+  .legend-header{padding:8px 12px;font-size:11px;font-weight:700;color:var(--teal-dark);display:flex;align-items:center;gap:6px}
+  .legend-header svg{width:12px;height:12px;transition:transform 0.2s}
+  .legend.collapsed .legend-header svg{transform:rotate(-90deg)}
+  .legend-items{padding:0 12px 8px}
+  .legend.collapsed .legend-items{display:none}
+  .legend-item{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;color:var(--text-primary)}
+  .legend-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+  .legend-swatch.line{width:14px;height:3px;border-radius:2px}
+  .legend-swatch.point{width:10px;height:10px;border-radius:50%;border:2px solid}
+
+  /* BOTTOM BAR */
+  .bottom-bar{position:absolute;bottom:0;left:0;right:0;height:calc(var(--bottom-bar-h) + var(--safe-bottom));background:rgba(255,255,255,0.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-around;padding-top:8px;z-index:50}
+  .bar-btn{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;min-width:64px;padding:6px 8px;border-radius:12px;transition:background 0.15s;border:none;background:none}
+  .bar-btn:active{background:var(--grey-light)}
+  .bar-btn svg{width:26px;height:26px;color:var(--teal-mid)}
+  .bar-btn span{font-size:10px;font-weight:600;color:var(--teal-mid)}
+  .bar-btn.active svg{color:var(--teal-dark)}.bar-btn.active span{color:var(--teal-dark)}
+  .bar-btn.recording svg{color:var(--record-red)}.bar-btn.recording span{color:var(--record-red)}
+
+  .recording-banner{position:absolute;top:var(--status-bar-h);left:0;right:0;background:var(--record-red);color:white;padding:10px 16px;font-size:13px;font-weight:600;display:none;align-items:center;justify-content:center;gap:8px;z-index:30}
+  .recording-banner.visible{display:flex}
+  .rec-dot{width:8px;height:8px;border-radius:50%;background:white;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+  .undo-toast{position:absolute;top:calc(var(--status-bar-h) + 8px);left:50%;transform:translateX(-50%);background:var(--teal-dark);color:white;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:600;display:none;align-items:center;gap:12px;z-index:40;box-shadow:0 4px 16px rgba(0,0,0,0.2)}
+  .undo-toast.visible{display:flex}
+  .undo-toast button{background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer}
+
+  .stop-btn-container{position:absolute;bottom:calc(var(--bottom-bar-h) + var(--safe-bottom) + 12px);left:50%;transform:translateX(-50%);z-index:55;display:none}
+  .stop-btn-container.visible{display:block}
+  .stop-btn{background:var(--record-red);color:white;border:none;padding:14px 40px;border-radius:28px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(217,48,37,0.4);display:flex;align-items:center;gap:8px}
+
+  /* MEASURE TOOL */
+  .measure-svg{position:absolute;inset:0;z-index:11;pointer-events:none;display:none}
+  .measure-svg.visible{display:block}
+  .measure-hint{position:absolute;top:calc(var(--status-bar-h) + 8px);left:50%;transform:translateX(-50%);background:var(--teal-dark);color:white;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:30;display:none;white-space:nowrap}
+  .measure-hint.visible{display:block}
+  .measure-total{position:absolute;bottom:calc(var(--bottom-bar-h) + var(--safe-bottom) + 56px);left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);padding:10px 18px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.15);font-size:14px;font-weight:700;color:var(--teal-dark);z-index:30;display:none;text-align:center}
+  .measure-total.visible{display:block}
+  .measure-total small{display:block;font-size:11px;font-weight:500;color:var(--teal-mid);margin-top:2px}
+  .measure-clear-container{position:absolute;bottom:calc(var(--bottom-bar-h) + var(--safe-bottom) + 12px);left:50%;transform:translateX(-50%);z-index:55;display:none}
+  .measure-clear-container.visible{display:block}
+  .measure-clear-btn{background:var(--teal-dark);color:white;border:none;padding:12px 32px;border-radius:24px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(28,74,80,0.3);display:flex;align-items:center;gap:8px}
+
+  /* INFO PANEL — slide-up, does NOT close on background tap. Only via close button or Save. */
+  .info-panel{position:absolute;bottom:calc(var(--bottom-bar-h) + var(--safe-bottom));left:0;right:0;background:var(--white);border-radius:16px 16px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,0.1);padding:16px 20px 20px;z-index:45;display:none;max-height:75vh;overflow-y:auto}
+  .info-panel.visible{display:block}
+  .info-panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .info-panel-handle{width:36px;height:4px;background:var(--sage);border-radius:2px;margin:0 auto 8px}
+  .info-panel-close{width:32px;height:32px;border-radius:50%;background:var(--grey-light);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-primary)}
+  .info-panel-close svg{width:16px;height:16px}
+  .info-panel h3{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px;flex:1}
+  .pin-badge{background:var(--teal-dark);color:white;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+  .info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid var(--grey-light)}
+  .info-row:last-of-type{border:none}
+  .info-label{color:var(--text-secondary);font-weight:500}.info-value{color:var(--text-primary);font-weight:600;text-align:right}
+  .info-panel-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .info-panel-actions button{flex:1;min-width:90px;padding:12px;border-radius:12px;font-size:14px;font-weight:600;border:none;cursor:pointer}
+  .btn-edit{background:var(--grey-light);color:var(--teal-dark)}
+  .btn-delete{background:#FDE8E8;color:var(--danger)}
+  .btn-export-small{background:rgba(28,74,80,0.08);color:var(--teal-dark)}
+  .btn-style{background:rgba(232,125,47,0.12);color:var(--orange)}
+
+  /* INLINE STYLE EDITOR — appears INSIDE the info panel; does not dismiss it. */
+  .style-editor{display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--grey-light)}
+  .style-editor.visible{display:block}
+  .style-section{margin-bottom:14px}
+  .style-section h5{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+  .colour-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .colour-dot{width:32px;height:32px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color 0.15s,transform 0.15s}
+  .colour-dot.selected{border-color:var(--teal-dark);transform:scale(1.1)}
+  .opacity-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .opacity-row label{font-size:12px;color:var(--text-secondary);min-width:64px}
+  .opacity-row input[type=range]{flex:1;-webkit-appearance:none;height:6px;border-radius:3px;background:var(--sage);outline:none}
+  .opacity-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--teal-dark);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.2)}
+  .opacity-val{font-size:12px;font-weight:700;color:var(--teal-dark);min-width:36px;text-align:right}
+  .toggle-mini{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+  .toggle-mini label{font-size:13px;color:var(--text-primary);font-weight:500}
+  .mini-switch{width:40px;height:24px;border-radius:12px;border:none;cursor:pointer;position:relative;background:var(--sage);transition:background 0.2s}
+  .mini-switch.on{background:var(--teal-dark)}
+  .mini-switch::after{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:white;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+  .mini-switch.on::after{left:18px}
+  .text-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;font-weight:500;color:var(--text-primary);outline:none;background:var(--white)}
+  .text-input:focus{border-color:var(--teal-dark)}
+  .style-save-row{display:flex;gap:10px;margin-top:14px}
+  .btn-save-style{flex:1;padding:12px;background:var(--teal-dark);color:white;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-cancel-style{flex:1;padding:12px;background:var(--grey-light);color:var(--text-primary);border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
+
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,0.3);z-index:54;display:none}
+  .overlay.visible{display:block}
+  .more-menu{position:absolute;bottom:calc(var(--bottom-bar-h) + var(--safe-bottom));left:0;right:0;background:var(--white);border-radius:20px 20px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,0.12);padding:20px;z-index:55;display:none;max-height:80vh;overflow-y:auto}
+  .more-menu.visible{display:block}
+  .more-menu-handle{width:36px;height:4px;background:var(--sage);border-radius:2px;margin:0 auto 20px}
+  .more-menu-item{display:flex;align-items:center;gap:16px;padding:14px 4px;cursor:pointer;border-radius:12px;transition:background 0.1s}
+  .more-menu-item:active{background:var(--grey-light)}
+  .more-menu-item-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .more-menu-item-icon svg{width:22px;height:22px}
+  .more-menu-item-label{font-size:17px;font-weight:600;color:var(--text-primary)}
+  .more-menu-item-desc{font-size:12px;color:var(--text-secondary);margin-top:2px}
+
+  .confirm-dialog{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--white);border-radius:16px;padding:24px;width:300px;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:none;text-align:center}
+  .confirm-dialog.visible{display:block}
+  .confirm-dialog h4{font-size:17px;font-weight:700;margin-bottom:8px}
+  .confirm-dialog p{font-size:14px;color:var(--text-secondary);margin-bottom:20px}
+  .confirm-dialog-actions{display:flex;gap:10px}
+  .confirm-dialog-actions button{flex:1;padding:12px;border-radius:12px;font-size:15px;font-weight:600;border:none;cursor:pointer}
+  .btn-cancel{background:var(--grey-light);color:var(--text-primary)}.btn-confirm-delete{background:var(--danger);color:white}
+
+  /* SHARE SHEET — iOS-style, AirDrop / Mail / Messages / Bluetooth / Files / Nearby Share */
+  .share-sheet{position:absolute;bottom:0;left:0;right:0;background:#F2F2F7;border-radius:16px 16px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,0.15);padding:16px 16px var(--safe-bottom);z-index:70;display:none;transform:translateY(100%);transition:transform 0.25s ease}
+  .share-sheet.visible{display:block;transform:translateY(0)}
+  .share-sheet-handle{width:36px;height:4px;background:#C7C7CC;border-radius:2px;margin:0 auto 12px}
+  .share-sheet-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:0 4px}
+  .share-sheet-title{font-size:14px;font-weight:600;color:var(--text-primary)}
+  .share-sheet-cancel{background:none;border:none;color:var(--gps-blue);font-size:15px;font-weight:600;cursor:pointer;padding:4px 8px}
+  .share-file-card{background:white;border-radius:12px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px}
+  .share-file-icon{width:40px;height:40px;background:var(--teal-dark);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700}
+  .share-file-name{font-size:14px;font-weight:600;color:var(--text-primary)}
+  .share-file-size{font-size:12px;color:var(--text-secondary);margin-top:2px}
+  .share-section-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;padding:4px 8px}
+  .share-row{display:flex;gap:12px;overflow-x:auto;padding:8px 4px 14px;scrollbar-width:none}
+  .share-row::-webkit-scrollbar{display:none}
+  .share-target{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;min-width:74px;flex-shrink:0}
+  .share-target-icon{width:60px;height:60px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+  .share-target-icon svg{width:32px;height:32px}
+  .share-target-label{font-size:11px;color:var(--text-primary);font-weight:500;text-align:center;line-height:1.2}
+  .share-list{background:white;border-radius:12px;margin-top:6px;overflow:hidden}
+  .share-list-item{display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;border-bottom:0.5px solid #E5E5EA}
+  .share-list-item:last-child{border-bottom:none}
+  .share-list-item:active{background:#E5E5EA}
+  .share-list-item-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)}
+  .share-list-item-label{flex:1;font-size:15px;color:var(--text-primary);font-weight:500}
+
+  /* SECONDARY SCREENS */
+  .screen-header{padding:calc(var(--status-bar-h) + 12px) 20px 16px;background:var(--white);border-bottom:1px solid var(--border)}
+  .screen-header-row{display:flex;align-items:center;gap:12px}
+  .back-btn{width:36px;height:36px;border-radius:50%;background:var(--grey-light);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .back-btn svg{width:20px;height:20px;color:var(--teal-dark)}
+  .screen-title{font-size:22px;font-weight:700;color:var(--teal-dark);flex:1}
+  .screen-header-action{padding:8px 16px;background:var(--teal-dark);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer}
+  .screen-body{flex:1;overflow-y:auto;background:var(--bg);padding-bottom:var(--safe-bottom)}
+
+  .list-section{padding:12px 16px 4px;font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
+  .list-item{display:flex;align-items:center;padding:14px 20px;background:var(--white);border-bottom:1px solid var(--grey-light);cursor:pointer;gap:14px;transition:background 0.1s}
+  .list-item:active{background:var(--grey-light)}
+  .list-item:first-child{border-top:1px solid var(--border)}
+  .list-item-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .list-item-icon svg{width:20px;height:20px}
+  .list-item-content{flex:1;min-width:0}
+  .list-item-title{font-size:15px;font-weight:600;color:var(--text-primary)}
+  .list-item-subtitle{font-size:12px;color:var(--text-secondary);margin-top:2px}
+  .list-item-chevron{color:var(--text-muted);flex-shrink:0}
+  .list-item-chevron svg{width:16px;height:16px}
+
+  .layer-row{display:flex;align-items:center;padding:14px 20px;background:var(--white);border-bottom:1px solid var(--grey-light);gap:12px}
+  .layer-row:first-child{border-top:1px solid var(--border)}
+  .layer-swatch{width:18px;height:18px;border-radius:4px;flex-shrink:0}
+  .layer-name{flex:1;font-size:15px;font-weight:600;color:var(--text-primary);cursor:pointer}
+  .toggle{width:44px;height:26px;border-radius:13px;border:none;cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0}
+  .toggle.on{background:var(--teal-dark)}.toggle.off{background:var(--sage)}
+  .toggle::after{content:'';position:absolute;width:22px;height:22px;border-radius:50%;background:white;top:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+  .toggle.on::after{left:20px}.toggle.off::after{left:2px}
+
+  .settings-item{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--white);border-bottom:1px solid var(--grey-light)}
+  .settings-item:first-child{border-top:1px solid var(--border)}
+  .settings-label{font-size:15px;font-weight:500;color:var(--text-primary)}
+  .settings-value{font-size:14px;color:var(--text-secondary)}
+
+  .success-toast{position:absolute;top:calc(var(--status-bar-h) + 8px);left:50%;transform:translateX(-50%);background:var(--success);color:white;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:600;display:none;align-items:center;gap:8px;z-index:80;box-shadow:0 4px 16px rgba(0,0,0,0.2)}
+  .success-toast.visible{display:flex}
+  .success-toast svg{width:16px;height:16px}
+
+  /* Layers panel header icon buttons (replace FAB buttons on the map) */
+  .layer-action-btn{width:36px;height:36px;border-radius:50%;background:var(--grey-light);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-left:6px;transition:background 0.15s}
+  .layer-action-btn:active{background:var(--sage)}
+  .layer-action-btn svg{width:18px;height:18px;color:var(--teal-dark)}
+
+  /* Measure segment labels rendered inside the SVG: small white pill with distance text */
+  .measure-svg .seg-label-bg{fill:rgba(255,255,255,0.95);stroke:#1C4A50;stroke-width:1}
+  .measure-svg .seg-label-text{fill:#1C4A50;font-family:Inter,sans-serif;font-size:11px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="phone-frame" id="app">
+
+  <!-- ========== MAP SCREEN ========== -->
+  <div class="screen active" id="screen-map">
+    <div class="map-canvas" id="mapCanvas">
+      <div class="contour"></div><div class="contour"></div><div class="contour"></div>
+      <div class="contour"></div><div class="contour"></div><div class="contour"></div>
+      <div class="creek"></div>
+
+      <!-- Polygon: separate fill + outline; supports watermark mode -->
+      <div class="map-polygon" id="mapPolygon" onclick="onFeatureTap(event,'polygon')"
+           style="background-color:rgba(155,175,175,0.25);border:2px solid rgba(155,175,175,0.7)">
+        <div class="map-polygon-label" id="mapPolygonLabel">Cave Entrance Zone</div>
+        <div class="map-polygon-watermark" id="mapPolygonWatermark">Cave Entrance Zone</div>
+      </div>
+
+      <!-- Track / line -->
+      <div class="map-line" id="mapLine" onclick="onFeatureTap(event,'line')"
+           style="background:#AFA96E"></div>
+      <div id="mapLineLabelHolder" style="position:absolute;top:53%;left:35%;font-size:10px;font-weight:600;color:var(--teal-dark);text-shadow:0 0 3px white;pointer-events:none;z-index:10">Access Track</div>
+
+      <!-- Pins (no outline by default) -->
+      <div class="map-pin pin-1" onclick="onFeatureTap(event,'pin1')">
+        <div class="map-pin-marker" id="pinMarker1" style="background:#1C4A50"><span class="map-pin-num">1</span></div>
+      </div>
+      <div class="map-pin pin-2" onclick="onFeatureTap(event,'pin2')">
+        <div class="map-pin-marker" id="pinMarker2" style="background:#1C4A50"><span class="map-pin-num">2</span></div>
+      </div>
+      <div class="map-pin pin-3" onclick="onFeatureTap(event,'pin3')">
+        <div class="map-pin-marker" id="pinMarker3" style="background:#1C4A50"><span class="map-pin-num">3</span></div>
+      </div>
+
+      <!-- SURVEY POINTS LAYER (renders + toggleable) -->
+      <div class="survey-points-group" id="surveyPointsGroup">
+        <div class="survey-pt" style="top:22%;left:65%" onclick="onSurveyPointTap(event,'SP-01')"><div class="survey-pt-label">SP-01</div></div>
+        <div class="survey-pt" style="top:38%;left:72%" onclick="onSurveyPointTap(event,'SP-02')"><div class="survey-pt-label">SP-02</div></div>
+        <div class="survey-pt" style="top:55%;left:78%" onclick="onSurveyPointTap(event,'SP-03')"><div class="survey-pt-label">SP-03</div></div>
+        <div class="survey-pt" style="top:70%;left:62%" onclick="onSurveyPointTap(event,'SP-04')"><div class="survey-pt-label">SP-04</div></div>
+        <div class="survey-pt" style="top:78%;left:48%" onclick="onSurveyPointTap(event,'SP-05')"><div class="survey-pt-label">SP-05</div></div>
+      </div>
+
+      <div class="gps-dot" id="gpsDot">
+        <div class="gps-dot-ring"></div>
+        <div class="gps-dot-inner"></div>
+        <div class="gps-accuracy">&plusmn;4m</div>
+      </div>
+
+      <!-- NORTH ARROW: redesigned compass -->
+      <div class="north-arrow" id="northArrow" onclick="toggleNorth()" title="Tap to lock north / unlock map rotation">
+        <svg viewBox="0 0 48 48">
+          <circle class="compass-bg" cx="24" cy="24" r="22" fill="none"/>
+          <!-- Tick marks at 4 cardinal directions -->
+          <line class="compass-tick" x1="24" y1="4" x2="24" y2="8" stroke="#1C4A50" stroke-width="1.5"/>
+          <line class="compass-tick" x1="24" y1="40" x2="24" y2="44" stroke="#1C4A50" stroke-width="1.5"/>
+          <line class="compass-tick" x1="4" y1="24" x2="8" y2="24" stroke="#1C4A50" stroke-width="1.5"/>
+          <line class="compass-tick" x1="40" y1="24" x2="44" y2="24" stroke="#1C4A50" stroke-width="1.5"/>
+          <!-- Red north needle -->
+          <polygon points="24,8 19,26 24,22 29,26" fill="#D93025"/>
+          <!-- White/grey south needle -->
+          <polygon class="compass-s-needle" points="24,40 19,22 24,26 29,22" fill="#9AAFAF"/>
+          <!-- N label -->
+          <text class="compass-n-label" x="24" y="6" text-anchor="middle" font-size="6" font-weight="800" fill="#D93025" font-family="Inter">N</text>
+        </svg>
+        <div class="lock-badge" title="Locked north-up">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6a5 5 0 00-10 0v2H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V10a2 2 0 00-2-2zM9 6a3 3 0 016 0v2H9V6z"/></svg>
+        </div>
+      </div>
+
+      <div class="legend" id="legend" onclick="toggleLegend()">
+        <div class="legend-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          Legend
+        </div>
+        <div class="legend-items" id="legendItems">
+          <div class="legend-item"><div class="legend-swatch" id="legendPolygonSwatch" style="background:rgba(155,175,175,0.5);border:2px solid #9AAFAF"></div><span id="legendPolygonName">Cave Entrance Zone</span></div>
+          <div class="legend-item"><div class="legend-swatch line" id="legendLineSwatch" style="background:#AFA96E"></div><span id="legendLineName">Access Track</span></div>
+          <div class="legend-item"><div class="legend-swatch point" style="background:#E87D2F;border-color:#E87D2F"></div>Survey Points</div>
+        </div>
+      </div>
+
+      <div class="scale-bar"><div class="scale-bar-line"></div><div class="scale-bar-text">100 m</div></div>
+
+      <!-- Measure overlay -->
+      <svg class="measure-svg" id="measureSvg" viewBox="0 0 390 844" preserveAspectRatio="none"></svg>
+      <div class="measure-hint" id="measureHint">Tap map to place first point</div>
+      <div class="measure-total" id="measureTotal">Total: 0 m<small>0 segments</small></div>
+      <div class="measure-clear-container" id="measureClearContainer">
+        <button class="measure-clear-btn" onclick="clearMeasure()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          Clear Measurement
+        </button>
+      </div>
+
+      <div class="recording-banner" id="recBanner"><div class="rec-dot"></div>Recording — 00:04:32 — 218 m</div>
+      <div class="undo-toast" id="undoToast">Pin 4 created<button onclick="hideUndo()">Undo</button></div>
+      <div class="stop-btn-container" id="stopBtn"><button class="stop-btn" onclick="stopRecording()"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop Recording</button></div>
+
+      <!-- (Import / Export are now nested as small icons in the Layers panel header) -->
+
+      <!-- INFO PANEL (with inline style editor) -->
+      <div class="info-panel" id="infoPanel">
+        <div class="info-panel-handle"></div>
+        <div class="info-panel-header">
+          <h3 id="infoPanelTitle"><span class="pin-badge" id="infoPanelBadge">1</span> <span id="infoPanelName">Pin 1</span></h3>
+          <button class="info-panel-close" onclick="hideInfoPanel()" title="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div id="infoPanelDetails">
+          <div class="info-row"><span class="info-label">Coordinates</span><span class="info-value">-23.341927, 119.723841</span></div>
+          <div class="info-row"><span class="info-label">Altitude</span><span class="info-value">487 m</span></div>
+          <div class="info-row"><span class="info-label">Accuracy</span><span class="info-value">&plusmn;4 m</span></div>
+          <div class="info-row"><span class="info-label">Distance</span><span class="info-value">127 m NE</span></div>
+          <div class="info-row"><span class="info-label">Time</span><span class="info-value">05 May 2026, 14:23</span></div>
+        </div>
+
+        <div class="info-panel-actions" id="infoPanelActions">
+          <button class="btn-style" onclick="openStyleEditor()">Edit Style</button>
+          <button class="btn-edit" onclick="openNoteEditor()">Edit Note</button>
+          <button class="btn-export-small" onclick="openShareSheet(currentFeature ? currentFeature.name : 'Item')">Export</button>
+          <button class="btn-delete" onclick="showConfirm()">Delete</button>
+        </div>
+
+        <!-- INLINE STYLE EDITOR (does NOT close info panel) -->
+        <div class="style-editor" id="styleEditor">
+          <div class="style-section" id="seFillSection">
+            <h5>Fill colour</h5>
+            <div class="colour-row" id="fillColourRow"></div>
+            <div class="opacity-row">
+              <label>Fill opacity</label>
+              <input type="range" id="fillOpacity" min="0" max="100" value="40" oninput="livePreviewStyle()">
+              <span class="opacity-val" id="fillOpacityVal">40%</span>
+            </div>
+          </div>
+
+          <div class="style-section" id="seOutlineSection">
+            <h5>Outline colour</h5>
+            <div class="colour-row" id="strokeColourRow"></div>
+            <div class="opacity-row">
+              <label>Outline opacity</label>
+              <input type="range" id="strokeOpacity" min="0" max="100" value="100" oninput="livePreviewStyle()">
+              <span class="opacity-val" id="strokeOpacityVal">100%</span>
+            </div>
+            <div class="opacity-row">
+              <label>Outline width</label>
+              <input type="range" id="strokeWidth" min="0" max="6" value="2" oninput="livePreviewStyle()">
+              <span class="opacity-val" id="strokeWidthVal">2 px</span>
+            </div>
+            <div class="toggle-mini" id="seOutlineToggleRow">
+              <label>Show outline</label>
+              <button class="mini-switch on" id="outlineSwitch" onclick="toggleSwitch(this);livePreviewStyle()"></button>
+            </div>
+          </div>
+
+          <div class="style-section" id="seLabelSection">
+            <h5>Label</h5>
+            <input class="text-input" type="text" id="labelText" placeholder="Label text" oninput="livePreviewStyle()">
+            <div class="toggle-mini">
+              <label>Show as watermark instead of label</label>
+              <button class="mini-switch" id="watermarkSwitch" onclick="toggleSwitch(this);livePreviewStyle()"></button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.4">Watermark mode shows the name as a faint overlay across the polygon — useful when point labels nearby would otherwise overlap.</div>
+          </div>
+
+          <div class="style-save-row">
+            <button class="btn-cancel-style" onclick="closeStyleEditor()">Cancel</button>
+            <button class="btn-save-style" onclick="saveStyle()">Save Style</button>
+          </div>
+        </div>
+
+        <!-- INLINE NOTE EDITOR -->
+        <div class="style-editor" id="noteEditor">
+          <div class="style-section">
+            <h5>Note</h5>
+            <textarea class="text-input" id="noteText" rows="3" placeholder="Add a note..." style="resize:vertical;font-family:inherit"></textarea>
+          </div>
+          <div class="style-save-row">
+            <button class="btn-cancel-style" onclick="closeNoteEditor()">Cancel</button>
+            <button class="btn-save-style" onclick="saveNote()">Save Note</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottom-bar">
+      <button class="bar-btn" id="btnPin" onclick="tapPin()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span>Pin</span>
+      </button>
+      <button class="bar-btn" id="btnRecord" onclick="tapRecord()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
+        <span>Record</span>
+      </button>
+      <button class="bar-btn" id="btnMeasure" onclick="tapMeasure()">
+        <!-- New Measure icon: clear ruler with tick marks -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="8" width="20" height="8" rx="1"/>
+          <line x1="6" y1="8" x2="6" y2="12"/>
+          <line x1="10" y1="8" x2="10" y2="13"/>
+          <line x1="14" y1="8" x2="14" y2="12"/>
+          <line x1="18" y1="8" x2="18" y2="13"/>
+        </svg>
+        <span>Measure</span>
+      </button>
+      <button class="bar-btn" id="btnMore" onclick="tapMore()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>
+        <span>More</span>
+      </button>
+    </div>
+
+    <!-- MORE MENU -->
+    <div class="overlay" id="moreOverlay" onclick="closeMore()"></div>
+    <div class="more-menu" id="moreMenu">
+      <div class="more-menu-handle"></div>
+      <div class="more-menu-item" onclick="goTo('screen-projects')">
+        <div class="more-menu-item-icon" style="background:rgba(28,74,80,0.08)"><svg viewBox="0 0 24 24" fill="none" stroke="#1C4A50" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+        <div><div class="more-menu-item-label">Projects</div><div class="more-menu-item-desc">Group and manage imported layers</div></div>
+      </div>
+      <div class="more-menu-item" onclick="goTo('screen-layers')">
+        <div class="more-menu-item-icon" style="background:rgba(175,169,110,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="#AFA96E" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+        <div><div class="more-menu-item-label">Layers</div><div class="more-menu-item-desc">Visibility, styling, import &amp; export</div></div>
+      </div>
+      <div class="more-menu-item" onclick="goTo('screen-settings')">
+        <div class="more-menu-item-icon" style="background:rgba(87,122,122,0.1)"><svg viewBox="0 0 24 24" fill="none" stroke="#577A7A" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+        <div><div class="more-menu-item-label">Settings</div><div class="more-menu-item-desc">Base map, GPS, preferences</div></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="confirmOverlay" style="z-index:59"></div>
+    <div class="confirm-dialog" id="confirmDialog">
+      <h4 id="confirmTitle">Delete this item?</h4>
+      <p id="confirmMsg">This action cannot be undone.</p>
+      <div class="confirm-dialog-actions">
+        <button class="btn-cancel" onclick="hideConfirm()">Cancel</button>
+        <button class="btn-confirm-delete" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+
+    <div class="success-toast" id="successToast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg><span id="successMsg">Saved</span></div>
+
+    <!-- SHARE SHEET -->
+    <div class="overlay" id="shareOverlay" style="z-index:69" onclick="closeShareSheet()"></div>
+    <div class="share-sheet" id="shareSheet">
+      <div class="share-sheet-handle"></div>
+      <div class="share-sheet-header">
+        <span class="share-sheet-title" id="shareSheetTitle">Share</span>
+        <button class="share-sheet-cancel" onclick="closeShareSheet()">Cancel</button>
+      </div>
+      <div class="share-file-card">
+        <div class="share-file-icon">.fmap</div>
+        <div>
+          <div class="share-file-name" id="shareFileName">NewmanCaveSurvey.fieldmap</div>
+          <div class="share-file-size">3 layers · 12 pins · 2 tracks · 84 KB</div>
+        </div>
+      </div>
+
+      <div class="share-section-label">Nearby</div>
+      <div class="share-row">
+        <div class="share-target" onclick="shareTo('AirDrop')">
+          <div class="share-target-icon" style="background:linear-gradient(135deg,#007AFF,#5856D6)">
+            <svg viewBox="0 0 24 24" fill="white"><path d="M12 2L4 18h3l5-9 5 9h3L12 2zm0 14a2 2 0 100 4 2 2 0 000-4z"/></svg>
+          </div>
+          <span class="share-target-label">AirDrop<br>(iOS)</span>
+        </div>
+        <div class="share-target" onclick="shareTo('Nearby Share')">
+          <div class="share-target-icon" style="background:linear-gradient(135deg,#34A853,#1A73E8)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M5 12a7 7 0 0114 0"/><path d="M2 12a10 10 0 0120 0"/></svg>
+          </div>
+          <span class="share-target-label">Nearby<br>(Android)</span>
+        </div>
+        <div class="share-target" onclick="shareTo('Bluetooth')">
+          <div class="share-target-icon" style="background:#0066CC">
+            <svg viewBox="0 0 24 24" fill="white"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg>
+          </div>
+          <span class="share-target-label">Bluetooth<br>direct</span>
+        </div>
+        <div class="share-target" onclick="shareTo('Wi-Fi peer')">
+          <div class="share-target-icon" style="background:#1C4A50">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12" y2="20"/></svg>
+          </div>
+          <span class="share-target-label">Wi-Fi<br>peer</span>
+        </div>
+      </div>
+
+      <div class="share-section-label">Apps</div>
+      <div class="share-row">
+        <div class="share-target" onclick="shareTo('Mail')">
+          <div class="share-target-icon" style="background:linear-gradient(135deg,#34C9FF,#1F8EFF)">
+            <svg viewBox="0 0 24 24" fill="white"><path d="M22 6l-10 7L2 6v12h20V6zm-2 0H4l8 5.5L20 6z"/></svg>
+          </div>
+          <span class="share-target-label">Mail</span>
+        </div>
+        <div class="share-target" onclick="shareTo('Messages')">
+          <div class="share-target-icon" style="background:#34C759">
+            <svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.04 2 11c0 2.4 1.06 4.58 2.78 6.18L4 22l4.94-1.45c.97.29 2 .45 3.06.45 5.52 0 10-4.04 10-9S17.52 2 12 2z"/></svg>
+          </div>
+          <span class="share-target-label">Messages</span>
+        </div>
+        <div class="share-target" onclick="shareTo('Files')">
+          <div class="share-target-icon" style="background:#1C4A50">
+            <svg viewBox="0 0 24 24" fill="white"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          </div>
+          <span class="share-target-label">Save to<br>Files</span>
+        </div>
+        <div class="share-target" onclick="shareTo('Copy Link')">
+          <div class="share-target-icon" style="background:#577A7A">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <span class="share-target-label">Copy Link</span>
+        </div>
+      </div>
+
+      <div class="share-list">
+        <div class="share-list-item" onclick="shareTo('Save to Files')">
+          <div class="share-list-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+          <span class="share-list-item-label">Save to Files</span>
+        </div>
+        <div class="share-list-item" onclick="shareTo('Print')">
+          <div class="share-list-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div>
+          <span class="share-list-item-label">Print Map</span>
+        </div>
+        <div class="share-list-item" onclick="shareTo('Add to Project')">
+          <div class="share-list-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+          <span class="share-list-item-label">Send to another Fieldmap project</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== PROJECTS SCREEN ========== -->
+  <div class="screen" id="screen-projects">
+    <div class="screen-header"><div class="screen-header-row">
+      <button class="back-btn" onclick="goTo('screen-map')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="screen-title">Projects</div>
+      <button class="screen-header-action" onclick="showSuccessToast('New project created')">+ New</button>
+    </div></div>
+    <div class="screen-body">
+      <div style="padding:12px 16px 4px;font-size:12px;color:var(--text-secondary)">Up to 4 projects can be visible at once.</div>
+      <div class="list-section">Visible</div>
+      <div class="list-item">
+        <div class="list-item-icon" style="background:var(--teal-dark)"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+        <div class="list-item-content"><div class="list-item-title">Newman Cave Survey</div><div class="list-item-subtitle">3 layers · today</div></div>
+        <button class="toggle on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+      </div>
+      <div class="list-item">
+        <div class="list-item-icon" style="background:var(--olive)"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+        <div class="list-item-content"><div class="list-item-title">Gorge Access Routes</div><div class="list-item-subtitle">5 layers · 28 Apr</div></div>
+        <button class="toggle on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+      </div>
+      <div class="list-section">Hidden</div>
+      <div class="list-item">
+        <div class="list-item-icon" style="background:var(--teal-light)"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+        <div class="list-item-content"><div class="list-item-title">Water System Baseline</div><div class="list-item-subtitle">2 layers · 20 Apr</div></div>
+        <button class="toggle off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== LAYERS SCREEN — toggles actually drive map visibility ========== -->
+  <div class="screen" id="screen-layers">
+    <div class="screen-header"><div class="screen-header-row">
+      <button class="back-btn" onclick="goTo('screen-map')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="screen-title">Layers</div>
+      <button class="layer-action-btn" onclick="goTo('screen-import')" title="Import layer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="layer-action-btn" onclick="openShareSheet('All Layers')" title="Export / Share layers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </button>
+    </div></div>
+    <div class="screen-body">
+      <div style="padding:12px 16px 4px;font-size:12px;color:var(--text-secondary)">Tap <strong>+</strong> above to import layers. Toggle individual layer visibility. Tap a layer name to edit colour/opacity/style.</div>
+      <div class="list-section">Newman Cave Survey</div>
+      <div id="layerListBuiltIn">
+        <div class="layer-row">
+          <div class="layer-swatch" id="layerSwatchPolygon" style="background:#9AAFAF"></div>
+          <div class="layer-name" onclick="editLayer('polygon')">Cave Entrance Zone</div>
+          <button class="toggle on" id="toggleLayerPolygon" onclick="toggleLayer(this,'polygon')"></button>
+        </div>
+        <div class="layer-row">
+          <div class="layer-swatch" id="layerSwatchLine" style="background:#AFA96E"></div>
+          <div class="layer-name" onclick="editLayer('line')">Access Track</div>
+          <button class="toggle on" id="toggleLayerLine" onclick="toggleLayer(this,'line')"></button>
+        </div>
+        <div class="layer-row">
+          <div class="layer-swatch" style="background:#E87D2F;border-radius:50%"></div>
+          <div class="layer-name" onclick="editLayer('survey')">Survey Points</div>
+          <button class="toggle on" id="toggleLayerSurvey" onclick="toggleLayer(this,'survey')"></button>
+        </div>
+        <div class="layer-row">
+          <div class="layer-swatch" style="background:#1C4A50;border-radius:50%"></div>
+          <div class="layer-name" onclick="editLayer('pins')">My Pins</div>
+          <button class="toggle on" id="toggleLayerPins" onclick="toggleLayer(this,'pins')"></button>
+        </div>
+      </div>
+      <div class="list-section" id="importedSectionLabel" style="display:none">Imported</div>
+      <div id="layerListImported"></div>
+    </div>
+  </div>
+
+  <!-- ========== IMPORT SCREEN ========== -->
+  <div class="screen" id="screen-import">
+    <div class="screen-header"><div class="screen-header-row">
+      <button class="back-btn" onclick="goTo('screen-map')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="screen-title">Import</div>
+    </div></div>
+    <div class="screen-body">
+      <div style="padding:20px 16px 8px;font-size:13px;color:var(--text-secondary)">Choose a file format to import. You can also receive a .fieldmap file from another device via AirDrop, Bluetooth, or Mail.</div>
+      <div class="list-item" onclick="importLayer('Shapefile');goTo('screen-map')"><div class="list-item-icon" style="background:rgba(28,74,80,0.08)"><svg viewBox="0 0 24 24" fill="none" stroke="#1C4A50" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div><div class="list-item-content"><div class="list-item-title">Shapefile (.shp + .dbf)</div><div class="list-item-subtitle">Points, lines, and polygons</div></div></div>
+      <div class="list-item" onclick="importLayer('KML');goTo('screen-map')"><div class="list-item-icon" style="background:rgba(232,125,47,0.1)"><svg viewBox="0 0 24 24" fill="none" stroke="#E87D2F" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div><div class="list-item-content"><div class="list-item-title">KML / KMZ</div><div class="list-item-subtitle">Google Earth format</div></div></div>
+      <div class="list-item" onclick="importLayer('GPX');goTo('screen-map')"><div class="list-item-icon" style="background:rgba(155,142,196,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="#9B8EC4" stroke-width="2"><path d="M4 20L10 8l4 6 6-14"/></svg></div><div class="list-item-content"><div class="list-item-title">GPX</div><div class="list-item-subtitle">GPS tracks and waypoints</div></div></div>
+      <div class="list-item" onclick="importLayer('GeoJSON');goTo('screen-map')"><div class="list-item-icon" style="background:rgba(175,169,110,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="#AFA96E" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="list-item-content"><div class="list-item-title">GeoJSON</div><div class="list-item-subtitle">Open standard format</div></div></div>
+      <div class="list-item" onclick="showSuccessToast('Receiving from nearby device...')"><div class="list-item-icon" style="background:rgba(45,125,210,0.12)"><svg viewBox="0 0 24 24" fill="none" stroke="#2D7DD2" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><circle cx="12" cy="20" r="1.5" fill="#2D7DD2"/></svg></div><div class="list-item-content"><div class="list-item-title">Receive from nearby device</div><div class="list-item-subtitle">AirDrop · Bluetooth · Wi-Fi</div></div></div>
+    </div>
+  </div>
+
+  <!-- ========== SETTINGS SCREEN ========== -->
+  <div class="screen" id="screen-settings">
+    <div class="screen-header"><div class="screen-header-row">
+      <button class="back-btn" onclick="goTo('screen-map')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="screen-title">Settings</div>
+    </div></div>
+    <div class="screen-body">
+      <div class="list-section">Map</div>
+      <div class="settings-item"><span class="settings-label">Base map</span><span class="settings-value">Topographic</span></div>
+      <div class="settings-item"><span class="settings-label">Distance units</span><span class="settings-value">Metric</span></div>
+      <div class="list-section">GPS</div>
+      <div class="settings-item"><span class="settings-label">Background recording</span><span class="settings-value">Allowed</span></div>
+      <div class="settings-item"><span class="settings-label">High accuracy mode</span><span class="settings-value">On</span></div>
+      <div class="list-section">Sharing</div>
+      <div class="settings-item"><span class="settings-label">Default share method</span><span class="settings-value">AirDrop</span></div>
+      <div class="settings-item"><span class="settings-label">My display name</span><span class="settings-value">John's iPhone</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   FIELDMAP PROTOTYPE — interactive logic
+   ============================================================ */
+
+// ---- Brand palette ----
+const PALETTE = ['#1C4A50','#577A7A','#9AAFAF','#AFA96E','#E87D2F','#E6007E','#9B8EC4','#B8D4E3','#D93025','#2D7DD2'];
+
+// ---- Feature state model ----
+const features = {
+  polygon: {
+    type:'polygon', name:'Cave Entrance Zone',
+    fillColour:'#9AAFAF', fillOpacity:0.25,
+    strokeColour:'#9AAFAF', strokeOpacity:0.7, strokeWidth:2, showStroke:true,
+    showWatermark:false,
+    el:'mapPolygon', labelEl:'mapPolygonLabel', watermarkEl:'mapPolygonWatermark',
+    legendSwatch:'legendPolygonSwatch', legendName:'legendPolygonName',
+    layerSwatch:'layerSwatchPolygon'
+  },
+  line: {
+    type:'line', name:'Access Track',
+    strokeColour:'#AFA96E', strokeOpacity:1, strokeWidth:3, showStroke:true,
+    el:'mapLine', legendSwatch:'legendLineSwatch', legendName:'legendLineName',
+    layerSwatch:'layerSwatchLine'
+  },
+  pin1:{type:'pin', name:'Pin 1', badge:'1', fillColour:'#1C4A50', strokeColour:'#FFFFFF', strokeWidth:0, showStroke:false, el:'pinMarker1'},
+  pin2:{type:'pin', name:'Pin 2', badge:'2', fillColour:'#1C4A50', strokeColour:'#FFFFFF', strokeWidth:0, showStroke:false, el:'pinMarker2'},
+  pin3:{type:'pin', name:'Pin 3', badge:'3', fillColour:'#1C4A50', strokeColour:'#FFFFFF', strokeWidth:0, showStroke:false, el:'pinMarker3'}
+};
+
+// ---- Mode state ----
+let measureActive = false;
+let recording = false;
+let northLocked = false;
+let currentFeature = null;
+let measurePoints = [];
+let nextPinNum = 4;        // pins 1-3 already on the map
+let nextImportId = 1;      // counter for imported layers
+
+// ---- Helpers ----
+function $(id){ return document.getElementById(id); }
+function hexToRgba(hex, alpha){
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  return 'rgba('+r+','+g+','+b+','+alpha+')';
+}
+function toggleSwitch(btn){ btn.classList.toggle('on'); }
+
+// ---- Drop a real pin on the map (called from Pin button) ----
+function dropPin(){
+  const num = nextPinNum++;
+  const key = 'pin' + num;
+  // Spread successive pins out a little so they don't all stack on the GPS dot
+  const offsetX = (Math.random()*40 - 20);
+  const offsetY = (Math.random()*40 - 20);
+  // Place the pin near the GPS dot (currently centred at 50%/50%)
+  const topPct = 50 + offsetY/8;
+  const leftPct = 50 + offsetX/8;
+  const colour = '#1C4A50';
+  // Build the pin DOM
+  const pinEl = document.createElement('div');
+  pinEl.className = 'map-pin';
+  pinEl.style.top = topPct+'%';
+  pinEl.style.left = leftPct+'%';
+  pinEl.setAttribute('onclick', "onFeatureTap(event,'"+key+"')");
+  const markerId = 'pinMarker'+num;
+  pinEl.innerHTML = '<div class="map-pin-marker" id="'+markerId+'" style="background:'+colour+'"><span class="map-pin-num">'+num+'</span></div>';
+  $('mapCanvas').appendChild(pinEl);
+  // Register feature so info panel + style editor work
+  features[key] = {
+    type:'pin', name:'Pin '+num, badge:String(num),
+    fillColour:colour, strokeColour:'#FFFFFF', strokeWidth:0, showStroke:false,
+    el: markerId
+  };
+  // Toast + undo
+  $('undoToast').innerHTML = 'Pin '+num+' created<button onclick="undoPin(\''+key+'\')">Undo</button>';
+  $('undoToast').classList.add('visible');
+  setTimeout(()=>$('undoToast').classList.remove('visible'), 4000);
+}
+function undoPin(key){
+  const f = features[key];
+  if(!f) return;
+  const markerEl = $(f.el);
+  if(markerEl && markerEl.parentElement) markerEl.parentElement.remove();
+  delete features[key];
+  hideUndo();
+  showSuccessToast('Pin removed');
+}
+
+// ---- Import: actually drop sample features onto the map and add to Layers panel ----
+function importLayer(format){
+  // Each format gives different sample geometry, all visible on the map immediately
+  const id = nextImportId++;
+  const key = 'import'+id;
+  const PALETTE_IMPORT = ['#9B8EC4','#E6007E','#2D7DD2','#577A7A','#AFA96E'];
+  const colour = PALETTE_IMPORT[(id-1) % PALETTE_IMPORT.length];
+
+  if(format==='Shapefile'){
+    // Add a polygon
+    const name = 'Imported Polygon '+id;
+    const polyEl = document.createElement('div');
+    polyEl.className = 'map-polygon';
+    polyEl.id = key;
+    polyEl.style.top = (15 + (id*8)%40)+'%';
+    polyEl.style.left = (45 + (id*5)%30)+'%';
+    polyEl.style.width = '140px';
+    polyEl.style.height = '90px';
+    polyEl.style.transform = 'rotate('+(id*7)+'deg)';
+    polyEl.style.borderRadius = '14px 22px 18px 14px';
+    polyEl.style.backgroundColor = hexToRgba(colour, 0.30);
+    polyEl.style.border = '2px solid '+colour;
+    polyEl.setAttribute('onclick', "onFeatureTap(event,'"+key+"')");
+    polyEl.innerHTML = '<div class="map-polygon-label" id="lbl_'+key+'">'+name+'</div><div class="map-polygon-watermark" id="wm_'+key+'">'+name+'</div>';
+    $('mapCanvas').appendChild(polyEl);
+    features[key] = {
+      type:'polygon', name:name,
+      fillColour:colour, fillOpacity:0.30,
+      strokeColour:colour, strokeOpacity:1, strokeWidth:2, showStroke:true,
+      showWatermark:false,
+      el:key, labelEl:'lbl_'+key, watermarkEl:'wm_'+key
+    };
+    addImportedLayerRow(key, colour, name, 'polygon');
+  } else if(format==='KML'){
+    // Add 3 points
+    const name = 'Imported KML '+id;
+    const groupId = 'group_'+key;
+    const group = document.createElement('div');
+    group.id = groupId;
+    group.style.cssText = 'position:absolute;inset:0;z-index:9;pointer-events:none';
+    const positions = [[28+id*3,32+id*4],[42+id*2,55+id*3],[60+id*4,28+id*5]];
+    positions.forEach((p, i)=>{
+      const sp = document.createElement('div');
+      sp.style.cssText = 'position:absolute;width:14px;height:14px;border-radius:50%;background:'+colour+';box-shadow:0 1px 3px rgba(0,0,0,0.25);pointer-events:auto;cursor:pointer;transform:translate(-50%,-50%);top:'+p[1]+'%;left:'+p[0]+'%';
+      sp.setAttribute('onclick',"onImportedPointTap(event,'"+key+"','"+name+'-'+(i+1)+"')");
+      sp.innerHTML = '<div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:600;color:#1C4A50;text-shadow:0 0 3px white;white-space:nowrap;pointer-events:none">'+name+'-'+(i+1)+'</div>';
+      group.appendChild(sp);
+    });
+    $('mapCanvas').appendChild(group);
+    features[key] = { type:'pointgroup', name:name, fillColour:colour, el:groupId };
+    addImportedLayerRow(key, colour, name, 'point');
+  } else if(format==='GPX'){
+    // Add a track line
+    const name = 'Imported Track '+id;
+    const lineEl = document.createElement('div');
+    lineEl.className = 'map-line';
+    lineEl.id = key;
+    lineEl.style.top = (35 + id*4)+'%';
+    lineEl.style.left = (10 + (id*3)%20)+'%';
+    lineEl.style.width = '180px';
+    lineEl.style.height = '3px';
+    lineEl.style.transform = 'rotate('+(15 + id*3)+'deg)';
+    lineEl.style.background = colour;
+    lineEl.setAttribute('onclick', "onFeatureTap(event,'"+key+"')");
+    $('mapCanvas').appendChild(lineEl);
+    features[key] = {
+      type:'line', name:name,
+      strokeColour:colour, strokeOpacity:1, strokeWidth:3, showStroke:true,
+      el:key
+    };
+    addImportedLayerRow(key, colour, name, 'line');
+  } else { // GeoJSON: a polygon + a point group
+    importLayer('Shapefile');
+    importLayer('KML');
+    return;
+  }
+  showSuccessToast(format+' imported — added to Layers');
+}
+
+function onImportedPointTap(e, layerKey, name){
+  if(measureActive){ e.stopPropagation(); return; }
+  e.stopPropagation();
+  const f = features[layerKey];
+  currentFeature = { type:'pin', name:name, fillColour:f.fillColour, strokeColour:'#FFFFFF', showStroke:false, strokeWidth:0 };
+  $('infoPanelName').textContent = name;
+  $('infoPanelBadge').style.background = f.fillColour;
+  $('infoPanelBadge').textContent = '•';
+  $('infoPanelDetails').innerHTML = '<div class="info-row"><span class="info-label">Layer</span><span class="info-value">'+f.name+'</span></div><div class="info-row"><span class="info-label">Type</span><span class="info-value">Imported point</span></div>';
+  $('styleEditor').classList.remove('visible');
+  $('noteEditor').classList.remove('visible');
+  $('infoPanelActions').style.display='flex';
+  $('infoPanel').classList.add('visible');
+}
+
+// Add an imported layer's row to the Layers panel so it can be toggled / styled
+function addImportedLayerRow(key, colour, name, kind){
+  $('importedSectionLabel').style.display = 'block';
+  const row = document.createElement('div');
+  row.className = 'layer-row';
+  row.id = 'row_'+key;
+  let swatchStyle = 'background:'+colour;
+  if(kind==='point') swatchStyle += ';border-radius:50%';
+  if(kind==='line') swatchStyle = 'background:'+colour+';height:4px;align-self:center';
+  row.innerHTML =
+    '<div class="layer-swatch" id="sw_'+key+'" style="'+swatchStyle+'"></div>'+
+    '<div class="layer-name" onclick="editLayer(\''+key+'\')">'+name+'</div>'+
+    '<button class="toggle on" onclick="toggleImportedLayer(this,\''+key+'\')"></button>';
+  $('layerListImported').appendChild(row);
+  // Update legend
+  rebuildLegend();
+}
+
+function toggleImportedLayer(btn, key){
+  btn.classList.toggle('on'); btn.classList.toggle('off');
+  const visible = btn.classList.contains('on');
+  const f = features[key];
+  if(!f) return;
+  const el = $(f.el);
+  if(el) el.style.display = visible ? '' : 'none';
+}
+
+function rebuildLegend(){
+  // Re-build legend so imported layers appear in it too
+  const items = $('legendItems');
+  if(!items) return;
+  // Find imported layers and append them once
+  // First, remove any previously appended import legend items
+  items.querySelectorAll('[data-import-legend]').forEach(n=>n.remove());
+  Object.keys(features).filter(k=>k.startsWith('import')).forEach(k=>{
+    const f = features[k];
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.setAttribute('data-import-legend','1');
+    let swatchHtml = '';
+    if(f.type==='polygon') swatchHtml = '<div class="legend-swatch" style="background:'+hexToRgba(f.fillColour,Math.max(0.3,f.fillOpacity))+';border:2px solid '+f.strokeColour+'"></div>';
+    if(f.type==='line') swatchHtml = '<div class="legend-swatch line" style="background:'+f.strokeColour+'"></div>';
+    if(f.type==='pointgroup') swatchHtml = '<div class="legend-swatch point" style="background:'+f.fillColour+';border-color:'+f.fillColour+'"></div>';
+    item.innerHTML = swatchHtml + '<span>'+f.name+'</span>';
+    items.appendChild(item);
+  });
+}
+
+// ---- Navigation ----
+function goTo(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(id).classList.add('active');
+  closeMore();
+  hideInfoPanel();
+}
+
+// ---- Bottom-bar actions ----
+function tapPin(){
+  if(measureActive) tapMeasure(); // exit measure first
+  dropPin();
+}
+// Two-step recording stop:
+//  1st tap on Record  -> start recording (banner visible, stop button hidden)
+//  2nd tap on Record  -> reveal "Stop Recording" button (recording continues)
+//  3rd tap on Record  -> hide the stop button again (recording continues)
+//  Tap Stop Recording -> actually finish recording
+function tapRecord(){
+  if(!recording){
+    recording = true;
+    $('btnRecord').classList.add('recording');
+    $('recBanner').classList.add('visible');
+    $('stopBtn').classList.remove('visible');   // not shown until 2nd tap
+    showSuccessToast('Recording started — tap Record again to reveal Stop button');
+  } else {
+    // already recording: toggle Stop button visibility
+    $('stopBtn').classList.toggle('visible');
+  }
+}
+function stopRecording(){
+  recording=false;
+  $('btnRecord').classList.remove('recording');
+  $('recBanner').classList.remove('visible');
+  $('stopBtn').classList.remove('visible');
+  showSuccessToast('Track saved');
+}
+function tapMeasure(){
+  measureActive = !measureActive;
+  $('btnMeasure').classList.toggle('active', measureActive);
+  document.body.classList.toggle('measure-active', measureActive);  // disables polygon/line/pin click intercept
+  $('measureSvg').classList.toggle('visible', measureActive);
+  $('measureHint').classList.toggle('visible', measureActive);
+  $('measureTotal').classList.toggle('visible', measureActive && measurePoints.length>0);
+  $('measureClearContainer').classList.toggle('visible', measureActive && measurePoints.length>0);
+  if(!measureActive){ measurePoints = []; renderMeasure(); }
+  if(measureActive) hideInfoPanel();
+}
+function tapMore(){ $('moreMenu').classList.add('visible'); $('moreOverlay').classList.add('visible'); }
+function closeMore(){ $('moreMenu').classList.remove('visible'); $('moreOverlay').classList.remove('visible'); }
+
+// ---- North arrow lock toggle ----
+function toggleNorth(){
+  northLocked = !northLocked;
+  $('northArrow').classList.toggle('locked', northLocked);
+  showSuccessToast(northLocked ? 'Map locked north-up' : 'Map rotation unlocked');
+}
+
+// ---- Legend collapse ----
+function toggleLegend(){ $('legend').classList.toggle('collapsed'); }
+
+// ---- MEASURE — handles taps anywhere on the canvas, including over polygons ----
+$('mapCanvas').addEventListener('click', function(e){
+  if(!measureActive) return;
+  // Only count direct taps on map (not on UI overlays like legend, fabs, etc.)
+  if(e.target.closest('.legend, .map-fab, .info-panel, .more-menu, .north-arrow, .scale-bar, .measure-clear-container, .measure-total, .measure-hint, .recording-banner, .undo-toast, .stop-btn-container')) return;
+  const rect = $('mapCanvas').getBoundingClientRect();
+  measurePoints.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  renderMeasure();
+  $('measureTotal').classList.add('visible');
+  $('measureClearContainer').classList.add('visible');
+  $('measureHint').textContent = measurePoints.length===1 ? 'Tap to add more points' : 'Tap to add more points · ' + measurePoints.length + ' set';
+});
+
+function renderMeasure(){
+  const svg = $('measureSvg');
+  const rect = $('mapCanvas').getBoundingClientRect();
+  svg.setAttribute('viewBox', '0 0 ' + rect.width + ' ' + rect.height);
+  let lines = '';
+  let labels = '';
+  let dots = '';
+  let total = 0;
+  for(let i=0;i<measurePoints.length;i++){
+    const p = measurePoints[i];
+    if(i>0){
+      const a = measurePoints[i-1];
+      lines += '<line x1="'+a.x+'" y1="'+a.y+'" x2="'+p.x+'" y2="'+p.y+'" stroke="#1C4A50" stroke-width="2.5" stroke-dasharray="4 4"/>';
+      // Approx scale: ~80px per 100m on this canvas
+      const px = Math.hypot(p.x-a.x, p.y-a.y);
+      const meters = px * (100/80);
+      total += meters;
+      // Per-segment label at midpoint, with a white pill background for legibility
+      const mx = (a.x + p.x)/2;
+      const my = (a.y + p.y)/2;
+      const text = Math.round(meters) + ' m';
+      const w = Math.max(34, text.length * 7 + 10);
+      labels += '<rect class="seg-label-bg" x="'+(mx - w/2)+'" y="'+(my - 10)+'" width="'+w+'" height="20" rx="10" ry="10"/>';
+      labels += '<text class="seg-label-text" x="'+mx+'" y="'+(my + 4)+'" text-anchor="middle">'+text+'</text>';
+    }
+    dots += '<circle cx="'+p.x+'" cy="'+p.y+'" r="6" fill="white" stroke="#1C4A50" stroke-width="2"/>';
+  }
+  // Order: lines first, then segment labels on top of lines, then dots on top of all
+  svg.innerHTML = lines + labels + dots;
+  $('measureTotal').innerHTML = 'Total: '+ Math.round(total) +' m<small>'+ Math.max(0, measurePoints.length-1) +' segment'+ (measurePoints.length===2?'':'s') +'</small>';
+}
+
+function clearMeasure(){
+  measurePoints = [];
+  renderMeasure();
+  $('measureTotal').classList.remove('visible');
+  $('measureClearContainer').classList.remove('visible');
+  $('measureHint').textContent = 'Tap map to place first point';
+}
+
+// ---- Feature tap → open info panel (NOT in measure mode) ----
+function onFeatureTap(e, key){
+  if(measureActive){ e.stopPropagation(); return; }
+  e.stopPropagation();
+  currentFeature = features[key];
+  showInfoPanel(key);
+}
+function onSurveyPointTap(e, name){
+  if(measureActive){ e.stopPropagation(); return; }
+  e.stopPropagation();
+  currentFeature = { type:'pin', name:name, fillColour:'#E87D2F', strokeColour:'#FFFFFF', showStroke:false, strokeWidth:0 };
+  $('infoPanelName').textContent = name;
+  $('infoPanelBadge').style.background = '#E87D2F';
+  $('infoPanelBadge').textContent = 'S';
+  $('infoPanelDetails').innerHTML = '<div class="info-row"><span class="info-label">Layer</span><span class="info-value">Survey Points</span></div><div class="info-row"><span class="info-label">Coordinates</span><span class="info-value">-23.343, 119.726</span></div><div class="info-row"><span class="info-label">Type</span><span class="info-value">Imported</span></div>';
+  $('styleEditor').classList.remove('visible');
+  $('noteEditor').classList.remove('visible');
+  $('infoPanelActions').style.display='flex';
+  $('infoPanel').classList.add('visible');
+}
+
+// ---- INFO PANEL — only closes via X button or Save action. ----
+function showInfoPanel(key){
+  const f = features[key];
+  $('infoPanelName').textContent = f.name;
+  if(f.type==='pin'){
+    $('infoPanelBadge').style.background = f.fillColour;
+    $('infoPanelBadge').textContent = f.badge || '•';
+    $('infoPanelDetails').innerHTML = '<div class="info-row"><span class="info-label">Coordinates</span><span class="info-value">-23.341927, 119.723841</span></div><div class="info-row"><span class="info-label">Altitude</span><span class="info-value">487 m</span></div><div class="info-row"><span class="info-label">Accuracy</span><span class="info-value">&plusmn;4 m</span></div><div class="info-row"><span class="info-label">Time</span><span class="info-value">05 May 2026, 14:23</span></div>';
+  } else if(f.type==='line'){
+    $('infoPanelBadge').style.background = f.strokeColour;
+    $('infoPanelBadge').textContent = '⎯';
+    $('infoPanelDetails').innerHTML = '<div class="info-row"><span class="info-label">Length</span><span class="info-value">218 m</span></div><div class="info-row"><span class="info-label">Type</span><span class="info-value">Track</span></div><div class="info-row"><span class="info-label">Colour</span><span class="info-value">'+f.strokeColour+'</span></div>';
+  } else if(f.type==='pointgroup'){
+    $('infoPanelBadge').style.background = f.fillColour;
+    $('infoPanelBadge').textContent = '◉';
+    const count = $(f.el) ? $(f.el).children.length : 0;
+    $('infoPanelDetails').innerHTML = '<div class="info-row"><span class="info-label">Type</span><span class="info-value">Imported points</span></div><div class="info-row"><span class="info-label">Points</span><span class="info-value">'+count+'</span></div><div class="info-row"><span class="info-label">Colour</span><span class="info-value">'+f.fillColour+'</span></div>';
+  } else { // polygon
+    $('infoPanelBadge').style.background = f.fillColour;
+    $('infoPanelBadge').textContent = '▢';
+    $('infoPanelDetails').innerHTML = '<div class="info-row"><span class="info-label">Area</span><span class="info-value">2,140 m²</span></div><div class="info-row"><span class="info-label">Perimeter</span><span class="info-value">186 m</span></div><div class="info-row"><span class="info-label">Type</span><span class="info-value">Polygon</span></div>';
+  }
+  $('styleEditor').classList.remove('visible');
+  $('noteEditor').classList.remove('visible');
+  $('infoPanelActions').style.display='flex';
+  $('infoPanel').classList.add('visible');
+}
+
+function hideInfoPanel(){
+  $('infoPanel').classList.remove('visible');
+  $('styleEditor').classList.remove('visible');
+  $('noteEditor').classList.remove('visible');
+  currentFeature = null;
+}
+
+// ---- Style editor — opens INSIDE the info panel; does NOT close panel ----
+function openStyleEditor(){
+  if(!currentFeature) return;
+  const f = currentFeature;
+  // Build colour rows
+  const fillRow = $('fillColourRow');
+  const strokeRow = $('strokeColourRow');
+  fillRow.innerHTML = ''; strokeRow.innerHTML = '';
+  PALETTE.forEach(c=>{
+    const fdot = document.createElement('div');
+    fdot.className='colour-dot' + (c===f.fillColour?' selected':'');
+    fdot.style.background = c;
+    fdot.dataset.colour = c;
+    fdot.onclick = function(){ document.querySelectorAll('#fillColourRow .colour-dot').forEach(d=>d.classList.remove('selected')); fdot.classList.add('selected'); livePreviewStyle(); };
+    fillRow.appendChild(fdot);
+
+    const sdot = document.createElement('div');
+    sdot.className='colour-dot' + (c===f.strokeColour?' selected':'');
+    sdot.style.background = c;
+    sdot.dataset.colour = c;
+    sdot.onclick = function(){ document.querySelectorAll('#strokeColourRow .colour-dot').forEach(d=>d.classList.remove('selected')); sdot.classList.add('selected'); livePreviewStyle(); };
+    strokeRow.appendChild(sdot);
+  });
+
+  // Show/hide sections based on feature type
+  if(f.type==='pin' || f.type==='pointgroup'){
+    $('seFillSection').querySelector('h5').textContent= (f.type==='pointgroup') ? 'Point colour' : 'Pin colour';
+    $('seFillSection').querySelector('.opacity-row').style.display='none';
+    $('seLabelSection').style.display='none';
+    $('seOutlineSection').style.display = (f.type==='pointgroup') ? 'none' : 'block';
+    if(f.type!=='pointgroup'){
+      $('seOutlineSection').querySelector('h5').textContent='Outline (off by default for pins)';
+      $('outlineSwitch').classList.toggle('on', !!f.showStroke);
+    }
+  } else {
+    // Re-show outline section in case it was hidden by a pointgroup
+    $('seOutlineSection').style.display='block';
+    $('seFillSection').querySelector('h5').textContent= (f.type==='line') ? 'Line colour' : 'Fill colour';
+    $('seFillSection').querySelector('.opacity-row').style.display = (f.type==='line') ? 'none' : 'flex';
+    $('seLabelSection').style.display = (f.type==='polygon' || f.type==='line') ? 'block' : 'none';
+    $('seOutlineSection').querySelector('h5').textContent = (f.type==='line') ? 'Line style' : 'Outline colour';
+    $('outlineSwitch').classList.toggle('on', f.showStroke!==false);
+  }
+
+  $('fillOpacity').value = Math.round((f.fillOpacity ?? 1)*100);
+  $('fillOpacityVal').textContent = $('fillOpacity').value+'%';
+  $('strokeOpacity').value = Math.round((f.strokeOpacity ?? 1)*100);
+  $('strokeOpacityVal').textContent = $('strokeOpacity').value+'%';
+  $('strokeWidth').value = f.strokeWidth ?? 2;
+  $('strokeWidthVal').textContent = $('strokeWidth').value+' px';
+  $('labelText').value = f.name || '';
+  $('watermarkSwitch').classList.toggle('on', !!f.showWatermark);
+
+  $('infoPanelActions').style.display='none';
+  $('styleEditor').classList.add('visible');
+  $('noteEditor').classList.remove('visible');
+}
+
+function closeStyleEditor(){
+  $('styleEditor').classList.remove('visible');
+  $('infoPanelActions').style.display='flex';
+  // Re-apply saved values to revert any live preview
+  applyFeatureStyle(currentFeature);
+}
+
+function livePreviewStyle(){
+  if(!currentFeature) return;
+  const fillSel = document.querySelector('#fillColourRow .colour-dot.selected');
+  const strokeSel = document.querySelector('#strokeColourRow .colour-dot.selected');
+  const preview = Object.assign({}, currentFeature);
+  if(fillSel) preview.fillColour = fillSel.dataset.colour;
+  if(strokeSel) preview.strokeColour = strokeSel.dataset.colour;
+  preview.fillOpacity = $('fillOpacity').value/100;
+  preview.strokeOpacity = $('strokeOpacity').value/100;
+  preview.strokeWidth = parseInt($('strokeWidth').value,10);
+  preview.showStroke = $('outlineSwitch').classList.contains('on');
+  preview.name = $('labelText').value;
+  preview.showWatermark = $('watermarkSwitch').classList.contains('on');
+  $('fillOpacityVal').textContent = $('fillOpacity').value+'%';
+  $('strokeOpacityVal').textContent = $('strokeOpacity').value+'%';
+  $('strokeWidthVal').textContent = $('strokeWidth').value+' px';
+  applyFeatureStyle(preview);
+}
+
+function saveStyle(){
+  if(!currentFeature) return;
+  const fillSel = document.querySelector('#fillColourRow .colour-dot.selected');
+  const strokeSel = document.querySelector('#strokeColourRow .colour-dot.selected');
+  if(fillSel) currentFeature.fillColour = fillSel.dataset.colour;
+  if(strokeSel) currentFeature.strokeColour = strokeSel.dataset.colour;
+  currentFeature.fillOpacity = $('fillOpacity').value/100;
+  currentFeature.strokeOpacity = $('strokeOpacity').value/100;
+  currentFeature.strokeWidth = parseInt($('strokeWidth').value,10);
+  currentFeature.showStroke = $('outlineSwitch').classList.contains('on');
+  currentFeature.name = $('labelText').value;
+  currentFeature.showWatermark = $('watermarkSwitch').classList.contains('on');
+  applyFeatureStyle(currentFeature);
+  showSuccessToast('Style saved');
+  closeStyleEditor();
+}
+
+function applyFeatureStyle(f){
+  if(!f || !f.el) return;
+  const el = $(f.el);
+  if(!el) return;
+
+  if(f.type==='polygon'){
+    el.style.backgroundColor = hexToRgba(f.fillColour, f.fillOpacity);
+    if(f.showStroke){
+      el.style.border = (f.strokeWidth+'px solid ') + hexToRgba(f.strokeColour, f.strokeOpacity);
+    } else {
+      el.style.border = '0 solid transparent';
+    }
+    if(f.labelEl) $(f.labelEl).textContent = f.name;
+    if(f.watermarkEl) $(f.watermarkEl).textContent = f.name;
+    el.classList.toggle('show-watermark', !!f.showWatermark);
+    el.classList.toggle('watermarked', !!f.showWatermark);
+    if(f.legendSwatch){
+      $(f.legendSwatch).style.background = hexToRgba(f.fillColour, Math.max(0.3, f.fillOpacity));
+      $(f.legendSwatch).style.border = (f.showStroke ? ('2px solid '+f.strokeColour) : 'none');
+    }
+    if(f.legendName) $(f.legendName).textContent = f.name;
+    if(f.layerSwatch) $(f.layerSwatch).style.background = f.fillColour;
+    // Imported layer fallback: update the dynamic layer-row swatch + legend
+    const importKey = Object.keys(features).find(k=>features[k]===f && k.startsWith('import'));
+    if(importKey){
+      const sw = $('sw_'+importKey);
+      if(sw){ sw.style.background = f.fillColour; }
+      rebuildLegend();
+    }
+  }
+  else if(f.type==='line'){
+    el.style.background = hexToRgba(f.strokeColour, f.strokeOpacity);
+    el.style.height = f.strokeWidth+'px';
+    if(f.legendSwatch) $(f.legendSwatch).style.background = f.strokeColour;
+    if(f.legendName) $(f.legendName).textContent = f.name;
+    if(f.layerSwatch) $(f.layerSwatch).style.background = f.strokeColour;
+    if($('mapLineLabelHolder') && f.el==='mapLine') $('mapLineLabelHolder').textContent = f.name;
+    // Imported layer fallback
+    const importKey = Object.keys(features).find(k=>features[k]===f && k.startsWith('import'));
+    if(importKey){
+      const sw = $('sw_'+importKey);
+      if(sw){ sw.style.background = f.strokeColour; }
+      rebuildLegend();
+    }
+  }
+  else if(f.type==='pin'){
+    el.style.background = f.fillColour;
+    if(f.showStroke && f.strokeWidth>0){
+      el.style.border = (f.strokeWidth+'px solid ')+f.strokeColour;
+      el.classList.add('outlined');
+    } else {
+      el.style.border = '0 solid transparent';
+      el.classList.remove('outlined');
+    }
+  }
+  else if(f.type==='pointgroup'){
+    // Update colour of every child point in the group
+    Array.from(el.children).forEach(child=>{
+      child.style.background = f.fillColour;
+    });
+    // Update layer swatch
+    const sw = document.getElementById('sw_'+ Object.keys(features).find(k=>features[k]===f));
+    if(sw) sw.style.background = f.fillColour;
+    rebuildLegend();
+  }
+}
+
+// ---- Note editor (separate from style) ----
+function openNoteEditor(){
+  $('infoPanelActions').style.display='none';
+  $('styleEditor').classList.remove('visible');
+  $('noteEditor').classList.add('visible');
+  $('noteText').value = currentFeature && currentFeature.note ? currentFeature.note : '';
+}
+function closeNoteEditor(){ $('noteEditor').classList.remove('visible'); $('infoPanelActions').style.display='flex'; }
+function saveNote(){ if(currentFeature) currentFeature.note = $('noteText').value; showSuccessToast('Note saved'); closeNoteEditor(); }
+
+// ---- Layer toggles — actually show/hide map layers ----
+function toggleLayer(btn, key){
+  btn.classList.toggle('on'); btn.classList.toggle('off');
+  const visible = btn.classList.contains('on');
+  if(key==='polygon'){ $('mapPolygon').style.display = visible?'block':'none'; }
+  if(key==='line'){ $('mapLine').style.display = visible?'block':'none'; $('mapLineLabelHolder').style.display = visible?'block':'none'; }
+  if(key==='survey'){ $('surveyPointsGroup').classList.toggle('hidden', !visible); }
+  if(key==='pins'){ document.querySelectorAll('.map-pin').forEach(p=> p.style.display = visible?'block':'none'); }
+}
+function editLayer(key){
+  if(key==='survey' || key==='pins'){ showSuccessToast('Tap a feature on the map to edit its style'); return; }
+  goTo('screen-map');
+  setTimeout(()=>{ currentFeature = features[key]; showInfoPanel(key); openStyleEditor(); }, 50);
+}
+
+// ---- Confirm dialog ----
+function showConfirm(){ $('confirmDialog').classList.add('visible'); $('confirmOverlay').classList.add('visible'); }
+function hideConfirm(){ $('confirmDialog').classList.remove('visible'); $('confirmOverlay').classList.remove('visible'); }
+function confirmDelete(){ hideConfirm(); hideInfoPanel(); showSuccessToast('Deleted'); }
+
+// ---- Toasts ----
+function showSuccessToast(msg){
+  $('successMsg').textContent = msg;
+  $('successToast').classList.add('visible');
+  setTimeout(()=>$('successToast').classList.remove('visible'), 2200);
+}
+function hideUndo(){ $('undoToast').classList.remove('visible'); }
+
+// ---- SHARE SHEET ----
+function openShareSheet(name){
+  $('shareSheetTitle').textContent = 'Share';
+  $('shareFileName').textContent = (name && name!=='All Layers') ? (name.replace(/\s+/g,'_')+'.fieldmap') : 'NewmanCaveSurvey.fieldmap';
+  $('shareSheet').classList.add('visible');
+  $('shareOverlay').classList.add('visible');
+}
+function closeShareSheet(){
+  $('shareSheet').classList.remove('visible');
+  $('shareOverlay').classList.remove('visible');
+}
+function shareTo(method){
+  closeShareSheet();
+  const messages = {
+    'AirDrop':'Sending via AirDrop... Look for nearby iOS devices',
+    'Nearby Share':'Sending via Nearby Share to Android devices',
+    'Bluetooth':'Pairing Bluetooth — keep both devices unlocked',
+    'Wi-Fi peer':'Wi-Fi peer connection ready — invite a nearby device',
+    'Mail':'Opening Mail with file attached',
+    'Messages':'Opening Messages',
+    'Files':'Saved to Files',
+    'Save to Files':'Saved to Files',
+    'Print':'Sending to printer',
+    'Copy Link':'Share link copied',
+    'Add to Project':'Choose a project to add to'
+  };
+  showSuccessToast(messages[method] || ('Shared via '+method));
+}
+
+// ---- Initial paint: apply default styles so things are consistent ----
+applyFeatureStyle(features.polygon);
+applyFeatureStyle(features.line);
+applyFeatureStyle(features.pin1);
+applyFeatureStyle(features.pin2);
+applyFeatureStyle(features.pin3);
+
+</script>
+</body>
+</html>
