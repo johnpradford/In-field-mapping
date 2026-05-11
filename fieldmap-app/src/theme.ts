@@ -51,9 +51,12 @@ export const PMTILES_URL =
  * fieldwork visibility checks. For shipped offline use, swap to a bundled
  * raster PMTiles or MBTiles archive of the relevant region (see README
  * "Offline base map tiles").
+ *
+ * The `cached://` prefix routes tile requests through tileCacheService
+ * so previously-viewed tiles stay available when the device drops offline.
  */
 export const SATELLITE_TILE_URL =
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  'cached://https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
 /** Style JSON used by MapLibre — satellite raster basemap.
  *

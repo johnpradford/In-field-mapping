@@ -8,6 +8,7 @@ import {
 } from '@/theme';
 import { useAppStore } from '@/store/appStore';
 import { getCurrentLocation } from '@/services/locationService';
+import { registerCachedTileProtocol } from '@/services/tileCacheService';
 import type { Layer, PointShape, FillPattern } from '@/models/Layer';
 import type { Pin } from '@/models/Pin';
 import type { Project } from '@/models/Project';
@@ -32,6 +33,10 @@ import type { MeasurePoint } from '@/store/appStore';
 // fetch tiles from a PMTiles archive via fetch / file: / etc.
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
+
+// Register cached:// so raster tile sources flagged with that scheme
+// are served from / written into the Cache API. Idempotent.
+registerCachedTileProtocol();
 
 /** Default pin colour — brand lavender. Edit per-pin colour is a future feature. */
 const PIN_COLOUR = '#9B8EC4';
