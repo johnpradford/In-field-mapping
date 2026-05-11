@@ -89,7 +89,7 @@ button {
    In a browser the OS/browser chrome already provides the clearance. */
 @media (display-mode: standalone) {
   .pb-safe {
-    padding-bottom: var(--safe-bottom);
+    padding-bottom: min(var(--safe-bottom), 16px);
   }
 }
 
