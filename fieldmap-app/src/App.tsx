@@ -14,8 +14,8 @@ import ExportScreen from '@/screens/ExportScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
 
 /**
- * Root component. Equivalent to ContentView.swift — picks which
- * screen to render based on the current state in the store.
+ * Root component. Picks which screen to render based on the current
+ * state in the store.
  *
  * No external router (react-router) is used; we keep the screen
  * stack inside the Zustand store so it's trivial to navigate

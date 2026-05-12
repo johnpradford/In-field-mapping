@@ -5,8 +5,8 @@ import type { Layer } from '@/models/Layer';
 import type { Project } from '@/models/Project';
 
 /**
- * Central app state. Mirrors AppState.swift from the Swift version.
- * Anything that the whole app needs to read/write lives here.
+ * Central app state. Anything the whole app needs to read or write
+ * lives here.
  */
 
 export type Screen =

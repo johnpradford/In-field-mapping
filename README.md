@@ -1,270 +1,53 @@
-# Fieldmap — Capacitor + React project
+# In-field-mapping
 
-Field navigation app for **Biologic Environmental** (biologicenv.com.au).
-Designed for ecologists working offline in remote environments — caves,
-gorges, water systems — in Western Australia.
+Monorepo for **Fieldmap** — an offline field-navigation app for
+[Biologic Environmental](https://www.biologicenv.com.au).
+Designed for ecologists working offline in remote environments in
+Western Australia (caves, gorges, water systems).
 
-This codebase is a fresh start in [Capacitor](https://capacitorjs.com)
-+ React + TypeScript. It replaces an earlier SwiftUI-only iOS prototype,
-which is preserved at `../_archive/Fieldmap-Xcode-Project/` for reference.
+The repo contains a single application package
+([`fieldmap-app/`](fieldmap-app)) built with Capacitor, React, and
+TypeScript, plus design/handoff documentation under [`docs/`](docs).
 
-The big win of moving to Capacitor: the same codebase runs on **iOS and
-Android** (and even in a regular browser for development), and most
-day-to-day work is done in plain web tech that any React developer can
-edit on Windows without touching a Mac until it's time to build for the
-App Store.
+## Where things live
 
----
-
-## What's in this folder
-
-```
-fieldmap-app/
-├── package.json                  — npm dependencies and scripts
-├── vite.config.ts                — bundler config
-├── tsconfig.json                 — TypeScript config
-├── tailwind.config.js            — colours / fonts (brand palette baked in)
-├── capacitor.config.ts           — app id, name, native settings
-├── index.html                    — single HTML page (loaded by the webview)
-├── src/
-│   ├── main.tsx                  — app entry
-│   ├── App.tsx                   — screen router (mirrors ContentView.swift)
-│   ├── index.css                 — global styles + MapLibre CSS
-│   ├── theme.ts                  — colour constants + map style + tile URL
-│   ├── store/
-│   │   └── appStore.ts           — central app state (mirrors AppState.swift)
-│   ├── models/                   — TS types: Pin / Track / Layer / Project / FieldmapFile
-│   ├── services/
-│   │   ├── locationService.ts    — GPS + background recording wrapper
-│   │   ├── databaseService.ts    — local DB via Dexie/IndexedDB
-│   │   ├── autosaveService.ts    — auto-persist store changes to the DB
-│   │   ├── fileImportService.ts  — GeoJSON / GPX / KML / Shapefile parsing
-│   │   └── fileExportService.ts  — .fieldmap / GeoJSON / GPX export
-│   ├── screens/                  — one file per screen (Map, Projects, Layers, Import, Export, Settings…)
-│   └── components/               — MapLibreMap, BottomBar, NorthArrow, PinInfoPanel, …
-└── README.md                     — this file
+```text
+.
+├── fieldmap-app/           # the actual app (Capacitor + React + TypeScript)
+├── docs/
+│   ├── phone-deployment.md       # ship to a phone via the PWA route
+│   ├── handoff-non-developer.md  # plain-language handoff guide
+│   ├── design/                   # spec doc + clickable HTML prototypes
+│   └── brand/                    # logos, brand AI files, palette assets
+├── .github/workflows/      # CI (GitHub Pages deploy + PR checks)
+├── CONTRIBUTING.md         # how to develop, verify, and contribute
+└── README.md               # this file
 ```
 
-The folder structure was deliberately mirrored on the old SwiftUI project
-so a Swift developer can see the equivalent file at a glance.
-
----
-
-## How to get this running (for a developer)
-
-You need **Node.js 20 or newer**. Everything else gets installed by
-`npm install`.
-
-### 1. Install dependencies
+## Quick start (developers)
 
 ```bash
 cd fieldmap-app
 npm install
-```
-
-### 2. Run in a browser (fastest dev loop)
-
-```bash
 npm run dev
 ```
 
-Open <http://localhost:5173>. The map renders, pins drop using the
-browser's geolocation, and most flows are testable.
-**File picker, share sheet, and background GPS** require a real device
-— see step 4.
+Then open <http://localhost:5173>. Full developer instructions
+(including iOS / Android native builds) live in
+[`fieldmap-app/README.md`](fieldmap-app/README.md).
 
-### 3. Add the native iOS and Android shells
+## Quick start (non-developers)
 
-One-time setup:
+If you just want to try the app on your phone without installing any
+developer tools, follow [`docs/phone-deployment.md`](docs/phone-deployment.md).
 
-```bash
-npx cap add ios
-npx cap add android
-```
+If you are about to hand the project to a developer, read
+[`docs/handoff-non-developer.md`](docs/handoff-non-developer.md).
 
-This creates `ios/` and `android/` folders containing the native Xcode
-and Android Studio projects. Treat them as build output — the source of
-truth is the `src/` web code.
+## Contributing
 
-### 4. Build for iOS
-
-You need a Mac for this step (Apple's restriction, not Capacitor's).
-
-```bash
-npm run cap:ios
-# → builds the web app, copies it into ios/, and opens Xcode
-```
-
-In Xcode:
-
-- Select your team under Signing & Capabilities
-- Add capability **Background Modes → Location updates**
-- In `Info.plist`, add `NSLocationAlwaysAndWhenInUseUsageDescription`
-  and `NSLocationWhenInUseUsageDescription` strings explaining why
-  the app needs location
-- Build and run on a connected iPhone
-
-### 5. Build for Android
-
-```bash
-npm run cap:android
-# → builds the web app, copies it into android/, and opens Android Studio
-```
-
-In Android Studio: in `AndroidManifest.xml`, ensure these permissions
-are present:
-
-```xml
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-```
-
-Then click Run on a connected phone or emulator.
-
-### 6. After every code change
-
-```bash
-npm run cap:sync
-```
-
-Copies the new web build into the iOS and Android projects.
-
-### Live reload on a real device (optional)
-
-Add this to `capacitor.config.ts` while developing, then `npx cap sync`:
-
-```ts
-server: {
-  url: 'http://YOUR-LAPTOP-IP:5173',
-  cleartext: true,
-}
-```
-
-The phone app loads from the Vite dev server on your laptop —
-file changes appear within a second.
-
----
-
-## What's done in this codebase
-
-- App shell, screen routing, navigation back-stack
-- Brand palette (Tailwind + theme.ts)
-- All ten screens scaffolded with working UI
-- **MapLibre GL JS map** with PMTiles vector tile source registered
-  (works the moment a real `.pmtiles` file is provided — see below)
-- Pin drop using a real GPS fix (sequential numbering, undo toast)
-- **Background GPS recording** — uses
-  `@capacitor-community/background-geolocation` so tracks keep
-  recording when the screen locks
-- Measure tool — tap-to-add points, line drawn on the map
-- Import GeoJSON / GPX / KML / Shapefile (.zip)
-- Export as .fieldmap / GeoJSON / GPX, opens native share sheet
-- Local database (Dexie / IndexedDB) for pins, tracks, layers, projects
-- **Autosave service** persists every store change to the local DB
-- **Editable pin notes** in the pin info panel
-- **Compass-aware north arrow** that rotates as the map rotates
-- Settings screen with persistent prefs (Capacitor Preferences plugin)
-- Typecheck + Vite production build verified clean
-
----
-
-## What still needs developer attention
-
-### Critical — won't ship without this
-
-1. **A real offline PMTiles archive**
-
-   The map source URL in `src/theme.ts` (`PMTILES_URL`) currently points
-   at the public Protomaps demo file. For real field use, replace it
-   with a `.pmtiles` archive of the survey region — typically downloaded
-   from <https://maps.protomaps.com> or self-extracted with
-   <https://github.com/protomaps/PMTiles>. The archive can be:
-
-   - **Bundled with the app** under `public/offline/wa-pilbara.pmtiles`,
-     then referenced as `pmtiles:///offline/wa-pilbara.pmtiles`
-   - **Downloaded into the device** at first launch via Capacitor
-     Filesystem, then loaded from the local file URI
-
-   The protocol is already registered (see `MapLibreMap.tsx`), so this
-   is purely a config + asset task.
-
-2. **App icon**
-
-   Drop a 1024×1024 PNG into `resources/` and run
-   `npx capacitor-assets generate`.
-
-### Important — works but rough
-
-3. **Permissions copy on iOS / Android** — generated `Info.plist` and
-   `AndroidManifest.xml` need user-facing strings explaining why the
-   app needs location. See steps 4 and 5 above.
-
-4. **Code splitting** — Vite warns the main bundle is over 500 KB
-   gzipped. Splitting MapLibre + maptile parsers into a separate chunk
-   would speed up cold start.
-
-5. **Layer reordering UI** — the data model has a `zIndex` field but
-   no drag-to-reorder UI yet.
-
-### Nice to have — can ship without
-
-6. Offline region downloader UI (let users pick a polygon and download
-   the matching PMTiles slice on demand)
-7. Track replay and editing
-8. Undo stack beyond just the last pin
-9. Pin clustering when zoomed out
-
----
-
-## Verifying the build yourself
-
-Anyone with Node.js 20+ can verify:
-
-```bash
-cd fieldmap-app
-npm install
-npx tsc --noEmit       # → exits 0, no type errors
-npm run build          # → produces dist/ in ~10 seconds
-```
-
----
-
-## Design reference
-
-In the parent folder:
-
-- `Field_Navigation_App_Brief_v1.docx` — full specification
-- `Fieldmap_Prototype.html` — clickable HTML prototype
-- `Fieldmap_Mobile.html` — same prototype sized for phone
-
-Brand assets (logos, AI files) are also in the parent folder.
-
-## Brand colours
-
-```
-Dark Teal (primary):  #1C4A50
-Mid Teal:             #577A7A
-Light Teal:           #9AAFAF
-Sage:                 #C7D3D3
-Grey Light:           #E4EAEA
-Olive:                #AFA96E
-Orange (accent):      #E87D2F
-Pink:                 #E6007E
-Lavender:             #9B8EC4
-Light Blue:           #B8D4E3
-```
-
-## Design principles
-
-1. **Speed** — every action in 1–2 taps
-2. **One-handed use** — primary controls at the bottom, thumb-reachable
-3. **Offline-first** — no internet required once data is loaded
-4. **Confidence** — always show GPS accuracy
-
-The target user is standing in a wet cave at 3am with cold fingers and
-one hand free.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for canonical install / verify
+commands and folder conventions.
 
 ## Contact
 

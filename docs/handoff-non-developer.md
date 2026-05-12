@@ -5,11 +5,12 @@ you're ready to bring a developer in.
 
 ## What to send them
 
-Just send them the whole `fieldmap-app/` folder. Optionally also send:
+Just send them the whole `fieldmap-app/` folder. Optionally also send the
+reference material under `docs/`:
 
-- `../Field_Navigation_App_Brief_v1.docx` (your design brief)
-- `../Fieldmap_Prototype.html` (the clickable mockup)
-- `../Biologic Master Logo 2025.png` and the brand AI files
+- `docs/design/field-navigation-app-brief-v1.docx` (your design brief)
+- `docs/design/fieldmap-prototype.html` (the clickable mockup)
+- `docs/brand/biologic-master-logo-2025.png` and the brand AI files
 
 If you've put the project on GitHub, just give them the repo link.
 
@@ -17,8 +18,8 @@ If you've put the project on GitHub, just give them the repo link.
 
 > "This is a Capacitor + React + TypeScript app — fresh start, scaffolded.
 > Read `fieldmap-app/README.md` first; it lists what's done and what's
-> still missing. The brief in the parent folder is the source of truth
-> for behaviour."
+> still missing. The brief at `docs/design/field-navigation-app-brief-v1.docx`
+> is the source of truth for behaviour."
 
 That's it. The README inside `fieldmap-app/` answers the technical
 questions for them.

@@ -36,17 +36,20 @@ echo npm version:
 call npm --version
 echo.
 
-REM Wipe any partial install from previous attempts so we start clean
+REM Wipe any partial install from previous attempts so we start clean.
+REM We keep package-lock.json: it is tracked in git and is the source of
+REM truth for dependency versions. `npm ci` installs exactly what the
+REM lockfile says, which avoids the lockfile getting silently rewritten
+REM on every install.
 if exist "node_modules" (
   echo Removing partial node_modules from a previous attempt...
   rmdir /s /q node_modules
 )
-if exist "package-lock.json" del /q package-lock.json
 
 echo.
-echo Attempt 1: Installing with the npm that came with Node...
+echo Attempt 1: Installing with the npm that came with Node (npm ci)...
 echo.
-call npm install --no-audit --no-fund --legacy-peer-deps
+call npm ci --no-audit --no-fund
 if not errorlevel 1 goto :install_ok
 
 echo.
@@ -58,9 +61,8 @@ echo ------------------------------------------------------------
 echo.
 
 if exist "node_modules" rmdir /s /q node_modules
-if exist "package-lock.json" del /q package-lock.json
 
-call npx -y -p npm@10.9.4 npm install --no-audit --no-fund --legacy-peer-deps
+call npx -y -p npm@10.9.4 npm ci --no-audit --no-fund
 if not errorlevel 1 goto :install_ok
 
 echo.

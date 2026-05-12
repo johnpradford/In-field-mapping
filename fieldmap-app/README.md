@@ -4,15 +4,11 @@ Field navigation app for **Biologic Environmental** (biologicenv.com.au).
 Designed for ecologists working offline in remote environments — caves,
 gorges, water systems — in Western Australia.
 
-This codebase is a fresh start in [Capacitor](https://capacitorjs.com)
-+ React + TypeScript. It replaces an earlier SwiftUI-only iOS prototype,
-which is preserved at `../_archive/Fieldmap-Xcode-Project/` for reference.
-
-The big win of moving to Capacitor: the same codebase runs on **iOS and
-Android** (and even in a regular browser for development), and most
-day-to-day work is done in plain web tech that any React developer can
-edit on Windows without touching a Mac until it's time to build for the
-App Store.
+This codebase is a Capacitor + React + TypeScript app. The same code
+runs on **iOS and Android** (and in a regular browser for development),
+and most day-to-day work is done in plain web tech that any React
+developer can edit on Windows without touching a Mac until it's time to
+build for the App Store.
 
 ---
 
@@ -28,11 +24,11 @@ fieldmap-app/
 ├── index.html                    — single HTML page (loaded by the webview)
 ├── src/
 │   ├── main.tsx                  — app entry
-│   ├── App.tsx                   — screen router (mirrors ContentView.swift)
+│   ├── App.tsx                   — screen router
 │   ├── index.css                 — global styles + MapLibre CSS
 │   ├── theme.ts                  — colour constants + map style + tile URL
 │   ├── store/
-│   │   └── appStore.ts           — central app state (mirrors AppState.swift)
+│   │   └── appStore.ts           — central app state (zustand)
 │   ├── models/                   — TS types: Pin / Track / Layer / Project / FieldmapFile
 │   ├── services/
 │   │   ├── locationService.ts    — GPS + background recording wrapper
@@ -45,9 +41,6 @@ fieldmap-app/
 └── README.md                     — this file
 ```
 
-The folder structure was deliberately mirrored on the old SwiftUI project
-so a Swift developer can see the equivalent file at a glance.
-
 ---
 
 ## How to get this running (for a developer)
@@ -59,8 +52,11 @@ You need **Node.js 20 or newer**. Everything else gets installed by
 
 ```bash
 cd fieldmap-app
-npm install
+npm ci
 ```
+
+`npm ci` installs exactly what `package-lock.json` says. Use
+`npm install` only when intentionally adding or updating dependencies.
 
 ### 2. Run in a browser (fastest dev loop)
 
@@ -224,22 +220,23 @@ Anyone with Node.js 20+ can verify:
 
 ```bash
 cd fieldmap-app
-npm install
-npx tsc --noEmit       # → exits 0, no type errors
-npm run build          # → produces dist/ in ~10 seconds
+npm ci
+npm run verify   # → typecheck + production build, exits 0 on success
 ```
+
+`npm run verify` is what CI runs on every PR.
 
 ---
 
 ## Design reference
 
-In the parent folder:
+In the repo `docs/` folder:
 
-- `Field_Navigation_App_Brief_v1.docx` — full specification
-- `Fieldmap_Prototype.html` — clickable HTML prototype
-- `Fieldmap_Mobile.html` — same prototype sized for phone
+- `docs/design/field-navigation-app-brief-v1.docx` — full specification
+- `docs/design/fieldmap-prototype.html` — clickable HTML prototype
+- `docs/design/fieldmap-mobile.html` — same prototype sized for phone
 
-Brand assets (logos, AI files) are also in the parent folder.
+Brand assets (logos, AI files) are under `docs/brand/`.
 
 ## Brand colours
 

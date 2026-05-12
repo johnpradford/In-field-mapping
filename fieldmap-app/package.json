@@ -4,10 +4,15 @@
   "version": "0.1.0",
   "description": "Fieldmap — offline field navigation app for Biologic Environmental. Capacitor + React.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "preview": "vite preview",
+    "verify": "npm run typecheck && npm run build",
     "cap:sync": "npm run build && cap sync",
     "cap:ios": "npm run cap:sync && cap open ios",
     "cap:android": "npm run cap:sync && cap open android"
